@@ -597,6 +597,33 @@ function renderForm(state: OverviewState): void {
 function renderSidebar(state: OverviewState): void {
   const section = (title: string, ...children: Child[]) =>
     h('section', {}, h('h3', {}, title), ...children)
+  /** A section whose content is edited in a picker of VS Code */
+  const editableSection = (
+    title: string,
+    edit: { type: 'editReviewers' | 'editLabels'; allowed: boolean; title: string },
+    ...children: Child[]
+  ) =>
+    h(
+      'section',
+      {},
+      h(
+        'h3',
+        {},
+        title,
+        edit.allowed &&
+          h(
+            'button',
+            {
+              class: 'link',
+              disabled: busyAction !== undefined,
+              title: edit.title,
+              onclick: () => send({ type: edit.type }),
+            },
+            busyAction === edit.type ? 'Saving…' : 'Edit',
+          ),
+      ),
+      ...children,
+    )
   const none = (text: string) => h('div', { class: 'muted' }, text)
 
   const reviewerIcon = (reviewerState: OverviewState['reviewers'][number]['state']) => {
@@ -628,8 +655,13 @@ function renderSidebar(state: OverviewState): void {
       ),
       h('div', { class: 'progress' }, h('div', { style: `width: ${percent}%` })),
     ),
-    section(
+    editableSection(
       'Reviewers',
+      {
+        type: 'editReviewers',
+        allowed: state.canEditReviewers,
+        title: 'Request or remove reviewers',
+      },
       state.reviewers.length === 0 ? none('No reviewers') : undefined,
       ...state.reviewers.map((reviewer) =>
         h(
@@ -648,8 +680,9 @@ function renderSidebar(state: OverviewState): void {
         h('div', { class: 'row' }, avatar(assignee), h('span', { class: 'name' }, assignee.login)),
       ),
     ),
-    section(
+    editableSection(
       'Labels',
+      { type: 'editLabels', allowed: state.canEditLabels, title: 'Add or remove labels' },
       state.labels.length === 0 ? none('None yet') : undefined,
       ...state.labels.map((label) =>
         h(

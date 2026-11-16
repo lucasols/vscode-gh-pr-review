@@ -417,9 +417,26 @@ details > summary {
 }
 
 .sidebar h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 0 8px;
   font-size: 1em;
   font-weight: 600;
+}
+
+button.link,
+button.link:hover:not(:disabled) {
+  padding: 0;
+  border: 0;
+  color: var(--vscode-textLink-foreground);
+  background: none;
+  font-weight: 400;
+}
+
+button.link:hover:not(:disabled) {
+  text-decoration: underline;
 }
 
 .sidebar .row {

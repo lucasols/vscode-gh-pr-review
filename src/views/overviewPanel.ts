@@ -13,6 +13,7 @@ import {
 import { errorMessage } from '../util/async'
 import css from '../webview/overview.css'
 import { buildOverviewState } from './overviewState'
+import { pickLabels, pickReviewers } from './pickers'
 
 const VIEW_TYPE = 'ghPrReview.overview'
 
@@ -223,6 +224,24 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
           store.markReadyForReview(prKey),
         )
         return
+
+      case 'editLabels': {
+        const change = await pickLabels(this.services, prKey)
+        if (!change) return
+        await this.run(open, 'editLabels', 'Could not update the labels', () =>
+          store.updateLabels(prKey, change),
+        )
+        return
+      }
+
+      case 'editReviewers': {
+        const change = await pickReviewers(this.services, prKey)
+        if (!change) return
+        await this.run(open, 'editReviewers', 'Could not update the reviewers', () =>
+          store.updateReviewers(prKey, change),
+        )
+        return
+      }
 
       case 'comment':
         await this.run(open, 'comment', 'Could not add the comment', () =>

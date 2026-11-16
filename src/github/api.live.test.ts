@@ -122,6 +122,19 @@ describe.skipIf(!token)('GitHub API (live, read-only)', () => {
     expect(prs.map((p) => p.number)).toContain(pr.number)
   }, 60_000)
 
+  test('loads the labels and the reviewers that a pull request can get', async () => {
+    const labels = await api.fetchLabels(repo)
+    expect(labels.length).toBeGreaterThan(0)
+    for (const label of labels) expect(label.color).toMatch(/^[0-9a-f]{6}$/i)
+
+    // the teams of a repository are only listed to who can see them
+    const reviewers = await api.fetchReviewerOptions(repo)
+    const users = reviewers.filter((reviewer) => reviewer.kind === 'user')
+    expect(users.length).toBeGreaterThan(0)
+    expect(new Set(users.map((user) => user.slug)).size).toBe(users.length)
+    console.info(JSON.stringify({ labels: labels.length, reviewers: reviewers.length }))
+  }, 60_000)
+
   test('a missing pull request is reported as not found', async () => {
     await expect(api.fetchDetail({ ...repo, number: 99999999 }, undefined)).rejects.toMatchObject({
       kind: 'notFound',

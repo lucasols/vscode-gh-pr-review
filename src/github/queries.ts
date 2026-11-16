@@ -118,13 +118,14 @@ export const PR_DETAIL_QUERY = /* GraphQL */ `
         mergeable
         mergeStateStatus
         viewerCanUpdate
+        viewerCanLabel
         viewerDidAuthor
         viewerCanMergeAsAdmin
         viewerCanEnableAutoMerge
         viewerCanDisableAutoMerge
         autoMergeRequest { mergeMethod enabledBy { login } }
         mergedBy { login }
-        labels(first: 30) { nodes { name color } }
+        labels(first: 100) { nodes { id name color } }
         assignees(first: 20) { nodes { ${ACTOR} } }
         milestone { title }
         reviewRequests(first: 30) {
@@ -134,7 +135,7 @@ export const PR_DETAIL_QUERY = /* GraphQL */ `
               ... on User { ${ACTOR} }
               ... on Bot { ${ACTOR} }
               ... on Mannequin { ${ACTOR} }
-              ... on Team { name teamAvatarUrl: avatarUrl(size: 64) }
+              ... on Team { name slug teamAvatarUrl: avatarUrl(size: 64) }
             }
           }
         }
@@ -277,6 +278,28 @@ export const PR_COMMITS_QUERY = /* GraphQL */ `
   }
 `
 
+export const REPO_LABELS_QUERY = /* GraphQL */ `
+  query RepoLabels($owner: String!, $name: String!, $after: String) {
+    repository(owner: $owner, name: $name) {
+      labels(first: 100, after: $after, orderBy: { field: NAME, direction: ASC }) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id name color description }
+      }
+    }
+  }
+`
+
+export const ASSIGNABLE_USERS_QUERY = /* GraphQL */ `
+  query AssignableUsers($owner: String!, $name: String!, $after: String) {
+    repository(owner: $owner, name: $name) {
+      assignableUsers(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id name ${ACTOR} }
+      }
+    }
+  }
+`
+
 /** Builds the mutation that marks or unmarks several files as viewed at once */
 export function buildSetViewedMutation(count: number, viewed: boolean): string {
   const field = viewed ? 'markFileAsViewed' : 'unmarkFileAsViewed'
@@ -414,6 +437,30 @@ export const READY_FOR_REVIEW_MUTATION = /* GraphQL */ `
   }
 `
 
+export const ADD_LABELS_MUTATION = /* GraphQL */ `
+  mutation AddLabels($input: AddLabelsToLabelableInput!) {
+    addLabelsToLabelable(input: $input) {
+      clientMutationId
+    }
+  }
+`
+
+export const REMOVE_LABELS_MUTATION = /* GraphQL */ `
+  mutation RemoveLabels($input: RemoveLabelsFromLabelableInput!) {
+    removeLabelsFromLabelable(input: $input) {
+      clientMutationId
+    }
+  }
+`
+
+export const REQUEST_REVIEWS_MUTATION = /* GraphQL */ `
+  mutation RequestReviews($input: RequestReviewsInput!) {
+    requestReviews(input: $input) {
+      pullRequest { id }
+    }
+  }
+`
+
 /** Every document, so that they can be validated against the schema */
 export const ALL_DOCUMENTS: Record<string, string> = {
   lists: buildListsQuery(2),
@@ -424,6 +471,8 @@ export const ALL_DOCUMENTS: Record<string, string> = {
   prThreadsPage: PR_THREADS_PAGE_QUERY,
   prHead: PR_HEAD_QUERY,
   prCommits: PR_COMMITS_QUERY,
+  repoLabels: REPO_LABELS_QUERY,
+  assignableUsers: ASSIGNABLE_USERS_QUERY,
   markViewed: buildSetViewedMutation(2, true),
   unmarkViewed: buildSetViewedMutation(2, false),
   addThread: ADD_THREAD_MUTATION,
@@ -440,4 +489,7 @@ export const ALL_DOCUMENTS: Record<string, string> = {
   enableAutoMerge: ENABLE_AUTO_MERGE_MUTATION,
   disableAutoMerge: DISABLE_AUTO_MERGE_MUTATION,
   readyForReview: READY_FOR_REVIEW_MUTATION,
+  addLabels: ADD_LABELS_MUTATION,
+  removeLabels: REMOVE_LABELS_MUTATION,
+  requestReviews: REQUEST_REVIEWS_MUTATION,
 }

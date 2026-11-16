@@ -58,6 +58,8 @@ function detail(files: PrFile[], overrides: Partial<PrSummary> = {}): PrDetail {
       mergeable: 'MERGEABLE',
       mergeStateStatus: 'CLEAN',
       viewerCanUpdate: true,
+      viewerCanLabel: true,
+      viewerCanRequestReviews: true,
       viewerDidAuthor: true,
       viewerCanMerge: true,
       viewerCanMergeAsAdmin: false,
@@ -168,6 +170,12 @@ function createHarness() {
     setThreadResolved: vi.fn<StoreApi['setThreadResolved']>(unused),
     addIssueComment: vi.fn<StoreApi['addIssueComment']>(unused),
     markReadyForReview: vi.fn<StoreApi['markReadyForReview']>(unused),
+    fetchLabels: vi.fn<StoreApi['fetchLabels']>(unused),
+    fetchReviewerOptions: vi.fn<StoreApi['fetchReviewerOptions']>(unused),
+    addLabels: vi.fn<StoreApi['addLabels']>(() => Promise.resolve()),
+    removeLabels: vi.fn<StoreApi['removeLabels']>(() => Promise.resolve()),
+    requestReviews: vi.fn<StoreApi['requestReviews']>(() => Promise.resolve()),
+    removeReviewRequests: vi.fn<StoreApi['removeReviewRequests']>(() => Promise.resolve()),
   } satisfies StoreApi
 
   const store = new PrStore({
@@ -530,5 +538,69 @@ describe('comments and reviews', () => {
 
     await h.store.disableAutoMerge(KEY)
     expect(h.api.disableAutoMerge).toHaveBeenCalledWith('PR_150')
+  })
+})
+
+describe('labels and reviewers', () => {
+  beforeEach(async () => {
+    h.store.setRepos([repo])
+    await h.store.refreshAll()
+  })
+
+  test('only the labels that changed are sent, and the pull request is loaded again', async () => {
+    h.api.fetchDetail.mockClear()
+    await h.store.updateLabels(KEY, { add: ['L_bug'], remove: [] })
+
+    expect(h.api.addLabels).toHaveBeenCalledWith('PR_150', ['L_bug'])
+    expect(h.api.removeLabels).not.toHaveBeenCalled()
+    expect(h.api.fetchDetail).toHaveBeenCalledTimes(1)
+
+    await h.store.updateLabels(KEY, { add: [], remove: ['L_bug', 'L_beta'] })
+    expect(h.api.addLabels).toHaveBeenCalledTimes(1)
+    expect(h.api.removeLabels).toHaveBeenCalledWith('PR_150', ['L_bug', 'L_beta'])
+  })
+
+  test('the pull request is loaded again when a change of the labels fails', async () => {
+    h.api.removeLabels.mockRejectedValueOnce(new Error('Not allowed'))
+    h.api.fetchDetail.mockClear()
+
+    await expect(
+      h.store.updateLabels(KEY, { add: ['L_bug'], remove: ['L_beta'] }),
+    ).rejects.toThrow('Not allowed')
+    expect(h.api.addLabels).toHaveBeenCalled()
+    expect(h.api.fetchDetail).toHaveBeenCalledTimes(1)
+  })
+
+  test('reviews are requested by id and their requests are removed by name', async () => {
+    h.api.fetchLists.mockClear()
+    await h.store.updateReviewers(KEY, {
+      add: { userIds: ['U_ana'], teamIds: ['T_core'] },
+      remove: { logins: ['bruno'], teamSlugs: [] },
+    })
+
+    expect(h.api.requestReviews).toHaveBeenCalledWith({
+      pullRequestId: 'PR_150',
+      userIds: ['U_ana'],
+      teamIds: ['T_core'],
+    })
+    expect(h.api.removeReviewRequests).toHaveBeenCalledWith(
+      { owner: 'acme', name: 'app', number: 150 },
+      { logins: ['bruno'], teamSlugs: [] },
+    )
+    // the categories of the list can depend on the requested reviews
+    expect(h.api.fetchLists).toHaveBeenCalledTimes(1)
+  })
+
+  test('nothing is sent for the side of the reviewers that did not change', async () => {
+    await h.store.updateReviewers(KEY, {
+      add: { userIds: [], teamIds: [] },
+      remove: { logins: [], teamSlugs: ['core'] },
+    })
+
+    expect(h.api.requestReviews).not.toHaveBeenCalled()
+    expect(h.api.removeReviewRequests).toHaveBeenCalledWith(
+      { owner: 'acme', name: 'app', number: 150 },
+      { logins: [], teamSlugs: ['core'] },
+    )
   })
 })

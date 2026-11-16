@@ -15,11 +15,15 @@ import {
   parsePrKey,
   summaryKey,
   type DiffSide,
+  type LabelChange,
+  type LabelOption,
   type MergeMethod,
   type PrDetail,
   type PrFile,
   type PrSummary,
   type ReviewEvent,
+  type ReviewerChange,
+  type ReviewerOption,
   type ViewedState,
 } from './types'
 
@@ -62,6 +66,12 @@ export type StoreApi = Pick<
   | 'enableAutoMerge'
   | 'disableAutoMerge'
   | 'markReadyForReview'
+  | 'fetchLabels'
+  | 'fetchReviewerOptions'
+  | 'addLabels'
+  | 'removeLabels'
+  | 'requestReviews'
+  | 'removeReviewRequests'
 >
 
 export type StoreDeps = {
@@ -694,6 +704,48 @@ export class PrStore {
     const detail = this.requireDetail(key)
     await this.deps.api.markReadyForReview(detail.summary.id)
     await Promise.all([this.refreshDetail(key), this.refreshLists()])
+  }
+
+  /** The labels of the repository of a pull request */
+  async fetchLabelOptions(key: string): Promise<LabelOption[]> {
+    const ref = parsePrKey(key)
+    return ref ? this.deps.api.fetchLabels(ref) : []
+  }
+
+  /** The users and the teams that can review a pull request */
+  async fetchReviewerOptions(key: string): Promise<ReviewerOption[]> {
+    const ref = parsePrKey(key)
+    return ref ? this.deps.api.fetchReviewerOptions(ref) : []
+  }
+
+  async updateLabels(key: string, change: LabelChange): Promise<void> {
+    const { id } = this.requireDetail(key).summary
+    try {
+      if (change.add.length > 0) await this.deps.api.addLabels(id, change.add)
+      if (change.remove.length > 0) await this.deps.api.removeLabels(id, change.remove)
+    } finally {
+      // one of the two changes can be saved when the other one fails
+      await this.refreshDetail(key)
+    }
+  }
+
+  async updateReviewers(key: string, change: ReviewerChange): Promise<void> {
+    const { id } = this.requireDetail(key).summary
+    const ref = parsePrKey(key)
+    if (!ref) return
+    const { add, remove } = change
+
+    try {
+      if (add.userIds.length > 0 || add.teamIds.length > 0) {
+        await this.deps.api.requestReviews({ pullRequestId: id, ...add })
+      }
+      if (remove.logins.length > 0 || remove.teamSlugs.length > 0) {
+        await this.deps.api.removeReviewRequests(ref, remove)
+      }
+    } finally {
+      // the lists can have a category for the reviews that are requested
+      await Promise.all([this.refreshDetail(key), this.refreshLists()])
+    }
   }
 
   /** The commits of the pull request that changed a file, newest first */

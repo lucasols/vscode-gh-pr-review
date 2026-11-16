@@ -93,10 +93,32 @@ export class GitHubClient {
     )
   }
 
-  async graphql<T>(
+  graphql<T>(
     query: string,
     variables: Record<string, unknown>,
     schema: z.ZodType<T>,
+  ): Promise<T> {
+    return this.execute(query, variables, schema, false)
+  }
+
+  /**
+   * Like `graphql`, but any error fails the request. GitHub answers a change
+   * that it rejects with an error next to an empty result, which would
+   * otherwise pass as a partial response.
+   */
+  mutate<T>(
+    query: string,
+    variables: Record<string, unknown>,
+    schema: z.ZodType<T>,
+  ): Promise<T> {
+    return this.execute(query, variables, schema, true)
+  }
+
+  private async execute<T>(
+    query: string,
+    variables: Record<string, unknown>,
+    schema: z.ZodType<T>,
+    failOnErrors: boolean,
   ): Promise<T> {
     const response = await this.request('/graphql', {
       method: 'POST',
@@ -124,6 +146,8 @@ export class GitHubClient {
         : 'api',
       )
     }
+
+    if (failOnErrors && errorText) throw new GitHubError(errorText, 'api')
 
     const parsed = schema.safeParse(data)
     if (!parsed.success) {
@@ -154,6 +178,16 @@ export class GitHubClient {
       throw new GitHubError('Unexpected data from GitHub', 'api')
     }
     return parsed.data
+  }
+
+  /** Sends a change that has no result to read */
+  async restSend(method: 'POST' | 'DELETE', path: string, body: unknown): Promise<void> {
+    const response = await this.request(path, {
+      method,
+      accept: 'application/vnd.github+json',
+      body: JSON.stringify(body),
+    })
+    if (!response.ok) throw await this.failure(response)
   }
 
   /** Downloads raw content. Returns undefined when it does not exist */

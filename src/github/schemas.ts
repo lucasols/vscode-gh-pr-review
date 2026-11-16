@@ -4,6 +4,7 @@ import type {
   CheckRun,
   CheckState,
   FileStatus,
+  LabelOption,
   MergeMethod,
   PrFile,
   PrOverview,
@@ -223,6 +224,7 @@ const requestedReviewerSchema = z
     __typename: z.string(),
     login: z.string().optional(),
     name: z.string().optional(),
+    slug: z.string().optional(),
     avatarUrl: z.string().optional(),
     teamAvatarUrl: z.string().nullable().optional(),
   })
@@ -267,6 +269,7 @@ const prDetailNodeSchema = prSummarySchema.extend({
   mergeable: z.enum(['MERGEABLE', 'CONFLICTING', 'UNKNOWN']),
   mergeStateStatus: z.string(),
   viewerCanUpdate: z.boolean(),
+  viewerCanLabel: z.boolean(),
   viewerDidAuthor: z.boolean(),
   viewerCanMergeAsAdmin: z.boolean(),
   viewerCanEnableAutoMerge: z.boolean(),
@@ -280,7 +283,9 @@ const prDetailNodeSchema = prSummarySchema.extend({
   mergedBy: z.object({ login: z.string() }).nullable(),
   labels: z
     .object({
-      nodes: z.array(z.object({ name: z.string(), color: z.string() }).nullable()),
+      nodes: z.array(
+        z.object({ id: z.string(), name: z.string(), color: z.string() }).nullable(),
+      ),
     })
     .nullable(),
   assignees: z.object({ nodes: z.array(actorSchema) }),
@@ -402,6 +407,62 @@ export const prCommitsSchema = z.object({
     })
     .nullable(),
 })
+
+export const repoLabelsSchema = z.object({
+  repository: z
+    .object({
+      labels: z
+        .object({
+          pageInfo: pageInfoSchema,
+          nodes: z.array(
+            z
+              .object({
+                id: z.string(),
+                name: z.string(),
+                color: z.string(),
+                description: z.string().nullable(),
+              })
+              .nullable(),
+          ),
+        })
+        .nullable(),
+    })
+    .nullable(),
+})
+
+export function toLabelOptions(
+  nodes: NonNullable<
+    NonNullable<z.infer<typeof repoLabelsSchema>['repository']>['labels']
+  >['nodes'],
+): LabelOption[] {
+  return nodes.flatMap((label) =>
+    label ? [{ ...label, description: label.description ?? undefined }] : [],
+  )
+}
+
+export const assignableUsersSchema = z.object({
+  repository: z
+    .object({
+      assignableUsers: z.object({
+        pageInfo: pageInfoSchema,
+        nodes: z.array(
+          z
+            .object({
+              id: z.string(),
+              login: z.string(),
+              name: z.string().nullable(),
+              avatarUrl: z.string().optional(),
+            })
+            .nullable(),
+        ),
+      }),
+    })
+    .nullable(),
+})
+
+export const restTeamsSchema = z.array(
+  z.object({ node_id: z.string(), slug: z.string(), name: z.string() }),
+)
 
 export const setViewedSchema = z.record(
   z.string(),
@@ -581,6 +642,8 @@ function toReviewers(raw: RawPrDetail): Reviewer[] {
     const state = review && toReviewerState(review.state)
     if (!review?.author || !state) continue
     reviewers.set(review.author.login, {
+      kind: 'user',
+      slug: review.author.login,
       name: review.author.login,
       avatarUrl: review.author.avatarUrl,
       state,
@@ -592,7 +655,10 @@ function toReviewers(raw: RawPrDetail): Reviewer[] {
     const reviewer = request?.requestedReviewer
     const name = reviewer?.login ?? reviewer?.name
     if (!reviewer || !name) continue
+    const isTeam = reviewer.__typename === 'Team'
     reviewers.set(name, {
+      kind: isTeam ? 'team' : 'user',
+      slug: (isTeam ? reviewer.slug : reviewer.login) ?? name,
       name,
       avatarUrl: reviewer.avatarUrl ?? reviewer.teamAvatarUrl ?? undefined,
       state: 'REQUESTED',
@@ -702,6 +768,8 @@ function toMergeMethod(value: string): MergeMethod | undefined {
 
 /** The permissions on a repository that include merging its pull requests */
 const MERGE_PERMISSIONS = new Set(['ADMIN', 'MAINTAIN', 'WRITE'])
+/** The permissions on a repository that include requesting reviews */
+const TRIAGE_PERMISSIONS = new Set([...MERGE_PERMISSIONS, 'TRIAGE'])
 
 export function toPrOverview(raw: RawPrDetail, repo: RawRepoSettings): PrOverview {
   const allowedMergeMethods: MergeMethod[] = []
@@ -726,6 +794,8 @@ export function toPrOverview(raw: RawPrDetail, repo: RawRepoSettings): PrOvervie
     mergeable: raw.mergeable,
     mergeStateStatus: raw.mergeStateStatus,
     viewerCanUpdate: raw.viewerCanUpdate,
+    viewerCanLabel: raw.viewerCanLabel,
+    viewerCanRequestReviews: TRIAGE_PERMISSIONS.has(repo.viewerPermission ?? ''),
     viewerDidAuthor: raw.viewerDidAuthor,
     viewerCanMerge: MERGE_PERMISSIONS.has(repo.viewerPermission ?? ''),
     viewerCanMergeAsAdmin: raw.viewerCanMergeAsAdmin,

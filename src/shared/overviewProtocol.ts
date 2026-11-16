@@ -123,6 +123,8 @@ export const overviewStateSchema = z.object({
   canEnableAutoMerge: z.boolean(),
   canDisableAutoMerge: z.boolean(),
   viewerCanUpdate: z.boolean(),
+  canEditLabels: z.boolean(),
+  canEditReviewers: z.boolean(),
   viewerDidAuthor: z.boolean(),
   pendingReviewComments: z.number().optional(),
   isCheckedOut: z.boolean(),
@@ -160,6 +162,8 @@ export const fromWebviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('enableAutoMerge'), method: mergeMethodSchema }),
   z.object({ type: z.literal('disableAutoMerge') }),
   z.object({ type: z.literal('readyForReview') }),
+  z.object({ type: z.literal('editReviewers') }),
+  z.object({ type: z.literal('editLabels') }),
   z.object({ type: z.literal('comment'), body: z.string() }),
   z.object({ type: z.literal('review'), event: reviewEventSchema, body: z.string() }),
   z.object({

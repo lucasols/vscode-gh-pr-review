@@ -26,7 +26,8 @@ Pull Requests extension that is built around two things:
   button on a folder opens only the files of that folder. With viewed files
   hidden, only the files left to review are included.
 - **Overview tab**: description, checks, reviewers, conversation, and the
-  buttons to merge, check out, comment, approve or request changes. The merge
+  buttons to merge, check out, comment, approve or request changes. The
+  reviewers and the labels can be edited when you have the permission. The merge
   button is disabled while GitHub would reject the merge, and auto-merge can
   be enabled or disabled when the repository allows it. Mermaid
   diagrams of the description and of the comments are rendered.

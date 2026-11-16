@@ -102,9 +102,43 @@ export type CheckRun = {
 }
 
 export type Reviewer = {
+  kind: 'user' | 'team'
+  /** The login of a user or the slug of a team, which the API identifies them by */
+  slug: string
+  /** What is displayed: the login of a user or the name of a team */
   name: string
   avatarUrl: string | undefined
   state: 'REQUESTED' | 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED'
+}
+
+/** A label of the repository that a pull request can get */
+export type LabelOption = {
+  id: string
+  name: string
+  color: string
+  description: string | undefined
+}
+
+/** A user or a team that a review can be requested from */
+export type ReviewerOption = {
+  kind: 'user' | 'team'
+  /** GraphQL node id */
+  id: string
+  /** The login of a user or the slug of a team */
+  slug: string
+  /** The name of the profile of a user, or the name of a team */
+  name: string | undefined
+  avatarUrl: string | undefined
+}
+
+/** The ids of the labels to add to a pull request and to remove from it */
+export type LabelChange = { add: string[]; remove: string[] }
+
+export type ReviewerChange = {
+  /** GraphQL node ids of who gets a review request */
+  add: { userIds: string[]; teamIds: string[] }
+  /** Whose review request is removed */
+  remove: { logins: string[]; teamSlugs: string[] }
 }
 
 export type TimelineItem =
@@ -143,6 +177,9 @@ export type PrOverview = {
   mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN'
   mergeStateStatus: string
   viewerCanUpdate: boolean
+  viewerCanLabel: boolean
+  /** The viewer can triage the repository, which requesting reviews needs */
+  viewerCanRequestReviews: boolean
   viewerDidAuthor: boolean
   /** The viewer can write to the repository, which merging needs */
   viewerCanMerge: boolean
@@ -153,7 +190,7 @@ export type PrOverview = {
   /** Set while GitHub waits for the requirements to merge on its own */
   autoMerge: { mergeMethod: MergeMethod; enabledBy: string | undefined } | undefined
   mergedBy: string | undefined
-  labels: { name: string; color: string }[]
+  labels: { id: string; name: string; color: string }[]
   assignees: Actor[]
   milestone: string | undefined
   reviewers: Reviewer[]

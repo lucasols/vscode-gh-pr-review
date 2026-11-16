@@ -1,19 +1,23 @@
 import type {
   DiffSide,
+  LabelOption,
   MergeMethod,
   PrDetail,
   PrRef,
   PrSummary,
   ReviewEvent,
+  ReviewerOption,
 } from '../model/types'
 import { chunk } from '../util/async'
 import { repoKey, type RepoRef } from '../util/remoteUrl'
 import { GitHubError, type GitHubClient } from './client'
 import {
   ADD_ISSUE_COMMENT_MUTATION,
+  ADD_LABELS_MUTATION,
   ADD_REVIEW_MUTATION,
   ADD_THREAD_MUTATION,
   ADD_THREAD_REPLY_MUTATION,
+  ASSIGNABLE_USERS_QUERY,
   BRANCH_PRS_QUERY,
   DELETE_COMMENT_MUTATION,
   DELETE_REVIEW_MUTATION,
@@ -26,6 +30,9 @@ import {
   PR_HEAD_QUERY,
   PR_THREADS_PAGE_QUERY,
   READY_FOR_REVIEW_MUTATION,
+  REMOVE_LABELS_MUTATION,
+  REPO_LABELS_QUERY,
+  REQUEST_REVIEWS_MUTATION,
   RESOLVE_THREAD_MUTATION,
   SUBMIT_REVIEW_MUTATION,
   UNRESOLVE_THREAD_MUTATION,
@@ -39,6 +46,7 @@ import {
   addThreadReplySchema,
   addThreadSchema,
   anyMutationSchema,
+  assignableUsersSchema,
   branchPrsSchema,
   listsSchema,
   parsePrSummaries,
@@ -48,10 +56,13 @@ import {
   prFilesPageSchema,
   prHeadSchema,
   prThreadsPageSchema,
+  repoLabelsSchema,
   restCommitsSchema,
   restCompareSchema,
   restFilesSchema,
+  restTeamsSchema,
   setViewedSchema,
+  toLabelOptions,
   toPendingReview,
   toPrFiles,
   toPrOverview,
@@ -92,6 +103,8 @@ export type PrCommit = {
 
 const MAX_DETAIL_ATTEMPTS = 3
 const MAX_REST_FILE_PAGES = 30
+/** The labels and the users of a repository are loaded 100 at a time */
+const MAX_OPTION_PAGES = 10
 
 function encodePath(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/')
@@ -327,6 +340,88 @@ export class GitHubApi {
     )
   }
 
+  /** The labels that the pull requests of a repository can get, by name */
+  async fetchLabels(repo: RepoRef): Promise<LabelOption[]> {
+    const labels: LabelOption[] = []
+    let after: string | undefined
+
+    for (let page = 0; page < MAX_OPTION_PAGES; page++) {
+      const data = await this.client.graphql(
+        REPO_LABELS_QUERY,
+        { owner: repo.owner, name: repo.name, after },
+        repoLabelsSchema,
+      )
+      const connection = data.repository?.labels
+      if (!connection) break
+      labels.push(...toLabelOptions(connection.nodes))
+      after = connection.pageInfo.endCursor ?? undefined
+      if (!connection.pageInfo.hasNextPage || !after) break
+    }
+
+    return labels
+  }
+
+  private async fetchAssignableUsers(repo: RepoRef): Promise<ReviewerOption[]> {
+    const users: ReviewerOption[] = []
+    let after: string | undefined
+
+    for (let page = 0; page < MAX_OPTION_PAGES; page++) {
+      const data = await this.client.graphql(
+        ASSIGNABLE_USERS_QUERY,
+        { owner: repo.owner, name: repo.name, after },
+        assignableUsersSchema,
+      )
+      const connection = data.repository?.assignableUsers
+      if (!connection) break
+      for (const user of connection.nodes) {
+        if (!user) continue
+        users.push({
+          kind: 'user',
+          id: user.id,
+          slug: user.login,
+          name: user.name ?? undefined,
+          avatarUrl: user.avatarUrl,
+        })
+      }
+      after = connection.pageInfo.endCursor ?? undefined
+      if (!connection.pageInfo.hasNextPage || !after) break
+    }
+
+    return users
+  }
+
+  private async fetchRepoTeams(repo: RepoRef): Promise<ReviewerOption[]> {
+    try {
+      const teams = await this.client.restJson(
+        `/repos/${repo.owner}/${repo.name}/teams?per_page=100`,
+        restTeamsSchema,
+      )
+      return teams.map((team) => ({
+        kind: 'team',
+        id: team.node_id,
+        slug: team.slug,
+        name: team.name,
+        avatarUrl: undefined,
+      }))
+    } catch (error) {
+      // the repository of a user has no teams, and GitHub only lists the
+      // teams to who can see them. The users can still be picked then
+      const isUnavailable =
+        error instanceof GitHubError && (error.kind === 'notFound' || error.status === 403)
+      if (isUnavailable) return []
+      throw error
+    }
+  }
+
+  /** The users and the teams of a repository that a review can be requested from */
+  async fetchReviewerOptions(repo: RepoRef): Promise<ReviewerOption[]> {
+    const [users, teams] = await Promise.all([
+      this.fetchAssignableUsers(repo),
+      this.fetchRepoTeams(repo),
+    ])
+    return [...users, ...teams]
+  }
+
   /**
    * Marks or unmarks files as viewed. Returns the head commit of the pull
    * request after the change, which tells if the files were marked on the
@@ -516,6 +611,50 @@ export class GitHubApi {
       READY_FOR_REVIEW_MUTATION,
       { input: { pullRequestId } },
       anyMutationSchema,
+    )
+  }
+
+  async addLabels(pullRequestId: string, labelIds: readonly string[]): Promise<void> {
+    await this.client.mutate(
+      ADD_LABELS_MUTATION,
+      { input: { labelableId: pullRequestId, labelIds } },
+      anyMutationSchema,
+    )
+  }
+
+  async removeLabels(pullRequestId: string, labelIds: readonly string[]): Promise<void> {
+    await this.client.mutate(
+      REMOVE_LABELS_MUTATION,
+      { input: { labelableId: pullRequestId, labelIds } },
+      anyMutationSchema,
+    )
+  }
+
+  /** Requests reviews, also from who already reviewed. The other requests are kept */
+  async requestReviews(input: {
+    pullRequestId: string
+    userIds: readonly string[]
+    teamIds: readonly string[]
+  }): Promise<void> {
+    await this.client.mutate(
+      REQUEST_REVIEWS_MUTATION,
+      { input: { ...input, union: true } },
+      anyMutationSchema,
+    )
+  }
+
+  /**
+   * GraphQL can only replace all the requests of a pull request at once, so
+   * the REST API is used to remove only the ones that are given.
+   */
+  async removeReviewRequests(
+    ref: PrRef,
+    input: { logins: readonly string[]; teamSlugs: readonly string[] },
+  ): Promise<void> {
+    await this.client.restSend(
+      'DELETE',
+      `/repos/${ref.owner}/${ref.name}/pulls/${ref.number}/requested_reviewers`,
+      { reviewers: input.logins, team_reviewers: input.teamSlugs },
     )
   }
 }

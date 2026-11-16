@@ -46,6 +46,8 @@ function fullDetail(): PrDetail {
       mergeable: 'UNKNOWN',
       mergeStateStatus: 'UNKNOWN',
       viewerCanUpdate: false,
+      viewerCanLabel: false,
+      viewerCanRequestReviews: false,
       viewerDidAuthor: false,
       viewerCanMerge: false,
       viewerCanMergeAsAdmin: false,

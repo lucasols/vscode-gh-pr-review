@@ -61,6 +61,8 @@ export function buildOverviewState(args: {
     canEnableAutoMerge: overview.viewerCanEnableAutoMerge,
     canDisableAutoMerge: overview.viewerCanDisableAutoMerge,
     viewerCanUpdate: overview.viewerCanUpdate,
+    canEditLabels: overview.viewerCanLabel,
+    canEditReviewers: overview.viewerCanRequestReviews && summary.state === 'OPEN',
     viewerDidAuthor: overview.viewerDidAuthor,
     pendingReviewComments: detail.pendingReview?.commentCount,
     isCheckedOut: args.isCheckedOut,
