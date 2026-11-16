@@ -208,6 +208,25 @@ describe('BaselineStore', () => {
     expect(new BaselineStore(storage).get('o/r#2')).toEqual({})
   })
 
+  test('sees the baselines that another window stored', () => {
+    const storage = createStorage()
+    const thisWindow = new BaselineStore(storage)
+    const otherWindow = new BaselineStore(storage)
+    const first: BaselineMap = { 'a.ts': { blob: 'blob-1', commit: 'head-1', at: T0 } }
+    const second: BaselineMap = { 'a.ts': { blob: 'blob-2', commit: 'head-2', at: T0 + 1 } }
+
+    thisWindow.set('o/r#1', first, T0)
+    expect(thisWindow.get('o/r#1')).toBe(first)
+    // the parsed value is reused while nothing changed
+    expect(otherWindow.get('o/r#1')).toBe(otherWindow.get('o/r#1'))
+
+    otherWindow.set('o/r#1', second, T0 + 1)
+    expect(thisWindow.get('o/r#1')).toEqual(second)
+
+    otherWindow.set('o/r#1', {}, T0 + 2)
+    expect(thisWindow.get('o/r#1')).toEqual({})
+  })
+
   test('removes the stored entry when there are no baselines left', () => {
     const storage = createStorage()
     const store = new BaselineStore(storage)

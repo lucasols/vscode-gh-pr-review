@@ -118,27 +118,31 @@ const storedSchema = z.object({ updatedAt: z.number(), files: baselineMapSchema 
 
 /** Keeps the baselines of each pull request in the storage of the extension */
 export class BaselineStore {
-  private readonly cache = new Map<string, BaselineMap>()
+  /**
+   * The parsed value of each stored entry. The storage is shared with the
+   * other windows, which can replace an entry at any time, so a parsed value
+   * is only reused while the stored value is still the same object.
+   */
+  private readonly cache = new Map<string, { raw: unknown; files: BaselineMap }>()
 
   constructor(private readonly storage: BaselineStorage) {}
 
   get(prKey: string): BaselineMap {
+    const raw = this.storage.get(STORAGE_PREFIX + prKey)
     const cached = this.cache.get(prKey)
-    if (cached) return cached
+    if (cached && cached.raw === raw) return cached.files
 
-    const parsed = storedSchema.safeParse(this.storage.get(STORAGE_PREFIX + prKey))
+    const parsed = storedSchema.safeParse(raw)
     const files = parsed.success ? parsed.data.files : {}
-    this.cache.set(prKey, files)
+    this.cache.set(prKey, { raw, files })
     return files
   }
 
   set(prKey: string, files: BaselineMap, now: number): void {
-    this.cache.set(prKey, files)
     const isEmpty = Object.keys(files).length === 0
-    void this.storage.update(
-      STORAGE_PREFIX + prKey,
-      isEmpty ? undefined : { updatedAt: now, files },
-    )
+    const raw = isEmpty ? undefined : { updatedAt: now, files }
+    this.cache.set(prKey, { raw, files })
+    void this.storage.update(STORAGE_PREFIX + prKey, raw)
   }
 
   /** Drops the pull requests that were not touched for the longest time */
