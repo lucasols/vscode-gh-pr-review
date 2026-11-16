@@ -1,0 +1,680 @@
+{
+  "name": "gh-pr-review",
+  "displayName": "GH PR Review",
+  "publisher": "lucasols",
+  "version": "0.1.0",
+  "description": "Review GitHub pull requests in VS Code with a stable file tree and diffs that show only what changed since you last marked a file as viewed",
+  "type": "module",
+  "main": "./dist/main.js",
+  "repository": "lucasols/vscode-gh-pr-review",
+  "license": "MIT",
+  "scripts": {
+    "lint": "pnpm tsc && pnpm eslint",
+    "tsc": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm lint && pnpm test && pnpm build:no-test",
+    "build:no-test": "tsup && vsce package --no-dependencies",
+    "bundle": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:host": "tsup && node scripts/run-host-test.mjs",
+    "validate-graphql": "node scripts/validate-graphql.mjs",
+    "build-and-install": "pnpm build && pnpm install-extension",
+    "install-extension": "code --install-extension $(ls -t gh-pr-review-*.vsix | head -n 1)"
+  },
+  "keywords": [
+    "github",
+    "pull request",
+    "code review",
+    "review"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "dependencies": {
+    "diff": "^8.0.2",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@ls-stack/extended-lint": "^0.14.4",
+    "@types/node": "^22.19.15",
+    "@types/vscode": "~1.100.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-unicorn": "^56.0.1",
+    "eslint-plugin-vitest": "^0.5.4",
+    "graphql": "^16.11.0",
+    "prettier": "^3.8.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.0",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "vscode": "^1.100.0",
+    "node": ">=20.0.0"
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onFileSystem:ghpr",
+    "onWebviewPanel:ghPrReview.overview"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ghPrReview",
+          "title": "GH PR Review",
+          "icon": "$(git-pull-request)"
+        }
+      ]
+    },
+    "views": {
+      "ghPrReview": [
+        {
+          "id": "ghPrReview.changes",
+          "name": "Changes",
+          "when": "ghPrReview.state == ready"
+        },
+        {
+          "id": "ghPrReview.prs",
+          "name": "Pull Requests"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ghPrReview.prs",
+        "contents": "Loading…",
+        "when": "ghPrReview.state == loading"
+      },
+      {
+        "view": "ghPrReview.prs",
+        "contents": "No GitHub repository was found in this workspace.\n[Refresh](command:ghPrReview.refresh)",
+        "when": "ghPrReview.state == noRepo"
+      },
+      {
+        "view": "ghPrReview.prs",
+        "contents": "Sign in to GitHub to list and review pull requests.\n[Sign in to GitHub](command:ghPrReview.signIn)",
+        "when": "ghPrReview.state == signedOut"
+      },
+      {
+        "view": "ghPrReview.changes",
+        "contents": "No pull request selected. Pick one from the Pull Requests list, or check out a branch that has a pull request.",
+        "when": "!ghPrReview.hasFocusedPr"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ghPrReview.refresh",
+        "title": "Refresh",
+        "category": "GH PR Review",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ghPrReview.signIn",
+        "title": "Sign in to GitHub",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.openPr",
+        "title": "Open Pull Request",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.openPrByNumber",
+        "title": "Open Pull Request by Number…",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.openDescription",
+        "title": "Open Pull Request Description",
+        "category": "GH PR Review",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "ghPrReview.openOnGitHub",
+        "title": "Open on GitHub",
+        "category": "GH PR Review",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "ghPrReview.copyLink",
+        "title": "Copy Link",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.checkout",
+        "title": "Checkout Pull Request",
+        "category": "GH PR Review",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "ghPrReview.focusCheckedOutPr",
+        "title": "Show Checked Out Pull Request",
+        "category": "GH PR Review",
+        "icon": "$(home)"
+      },
+      {
+        "command": "ghPrReview.openFile",
+        "title": "Open Changes",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.openFullDiff",
+        "title": "Open Full Diff",
+        "category": "GH PR Review",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "ghPrReview.openChangesSinceViewed",
+        "title": "Open Changes Since Viewed",
+        "category": "GH PR Review",
+        "icon": "$(history)"
+      },
+      {
+        "command": "ghPrReview.toggleDiffMode",
+        "title": "Switch Between Changes Since Viewed and Full Diff",
+        "category": "GH PR Review",
+        "icon": "$(history)"
+      },
+      {
+        "command": "ghPrReview.compareWithCommit",
+        "title": "Open Changes Since Commit…",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.openLocalFile",
+        "title": "Open File",
+        "category": "GH PR Review",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "ghPrReview.copyPath",
+        "title": "Copy Path",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.markViewed",
+        "title": "Mark as Viewed",
+        "category": "GH PR Review",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "ghPrReview.unmarkViewed",
+        "title": "Mark as Not Viewed",
+        "category": "GH PR Review",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "ghPrReview.markViewedAndNext",
+        "title": "Mark as Viewed and Open Next Unviewed File",
+        "category": "GH PR Review",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "ghPrReview.openNextUnviewed",
+        "title": "Open Next Unviewed File",
+        "category": "GH PR Review",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "ghPrReview.viewAsTree",
+        "title": "View as Tree",
+        "category": "GH PR Review",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "ghPrReview.viewAsList",
+        "title": "View as List",
+        "category": "GH PR Review",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "ghPrReview.hideViewed",
+        "title": "Hide Viewed Files",
+        "category": "GH PR Review",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "ghPrReview.showViewed",
+        "title": "Show Viewed Files",
+        "category": "GH PR Review",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "ghPrReview.submitReview",
+        "title": "Submit Review…",
+        "category": "GH PR Review",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "ghPrReview.discardReview",
+        "title": "Discard Pending Review",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.comment.addSingle",
+        "title": "Add Comment",
+        "category": "GH PR Review",
+        "enablement": "!commentIsEmpty"
+      },
+      {
+        "command": "ghPrReview.comment.startReview",
+        "title": "Start Review",
+        "category": "GH PR Review",
+        "enablement": "!commentIsEmpty"
+      },
+      {
+        "command": "ghPrReview.comment.addToReview",
+        "title": "Add Review Comment",
+        "category": "GH PR Review",
+        "enablement": "!commentIsEmpty"
+      },
+      {
+        "command": "ghPrReview.comment.resolve",
+        "title": "Resolve Conversation",
+        "category": "GH PR Review",
+        "icon": "$(check)"
+      },
+      {
+        "command": "ghPrReview.comment.unresolve",
+        "title": "Unresolve Conversation",
+        "category": "GH PR Review",
+        "icon": "$(issue-reopened)"
+      },
+      {
+        "command": "ghPrReview.comment.edit",
+        "title": "Edit Comment",
+        "category": "GH PR Review",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "ghPrReview.comment.delete",
+        "title": "Delete Comment",
+        "category": "GH PR Review",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "ghPrReview.comment.save",
+        "title": "Save",
+        "category": "GH PR Review"
+      },
+      {
+        "command": "ghPrReview.comment.cancelEdit",
+        "title": "Cancel",
+        "category": "GH PR Review"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "ghPrReview.openPr", "when": "false" },
+        { "command": "ghPrReview.openFile", "when": "false" },
+        { "command": "ghPrReview.openFullDiff", "when": "false" },
+        { "command": "ghPrReview.openChangesSinceViewed", "when": "false" },
+        { "command": "ghPrReview.compareWithCommit", "when": "false" },
+        { "command": "ghPrReview.toggleDiffMode", "when": "false" },
+        { "command": "ghPrReview.openLocalFile", "when": "false" },
+        { "command": "ghPrReview.copyPath", "when": "false" },
+        { "command": "ghPrReview.copyLink", "when": "false" },
+        { "command": "ghPrReview.markViewed", "when": "false" },
+        { "command": "ghPrReview.unmarkViewed", "when": "false" },
+        { "command": "ghPrReview.markViewedAndNext", "when": "false" },
+        { "command": "ghPrReview.comment.addSingle", "when": "false" },
+        { "command": "ghPrReview.comment.startReview", "when": "false" },
+        { "command": "ghPrReview.comment.addToReview", "when": "false" },
+        { "command": "ghPrReview.comment.resolve", "when": "false" },
+        { "command": "ghPrReview.comment.unresolve", "when": "false" },
+        { "command": "ghPrReview.comment.edit", "when": "false" },
+        { "command": "ghPrReview.comment.delete", "when": "false" },
+        { "command": "ghPrReview.comment.save", "when": "false" },
+        { "command": "ghPrReview.comment.cancelEdit", "when": "false" },
+        { "command": "ghPrReview.viewAsTree", "when": "false" },
+        { "command": "ghPrReview.viewAsList", "when": "false" },
+        { "command": "ghPrReview.hideViewed", "when": "false" },
+        { "command": "ghPrReview.showViewed", "when": "false" },
+        { "command": "ghPrReview.openDescription", "when": "ghPrReview.hasFocusedPr" },
+        { "command": "ghPrReview.openOnGitHub", "when": "ghPrReview.hasFocusedPr" },
+        { "command": "ghPrReview.checkout", "when": "ghPrReview.hasFocusedPr" },
+        { "command": "ghPrReview.openNextUnviewed", "when": "ghPrReview.hasFocusedPr" },
+        { "command": "ghPrReview.submitReview", "when": "ghPrReview.hasFocusedPr" },
+        { "command": "ghPrReview.discardReview", "when": "ghPrReview.hasPendingReview" }
+      ],
+      "view/title": [
+        {
+          "command": "ghPrReview.refresh",
+          "when": "view == ghPrReview.prs",
+          "group": "navigation@9"
+        },
+        {
+          "command": "ghPrReview.openPrByNumber",
+          "when": "view == ghPrReview.prs"
+        },
+        {
+          "command": "ghPrReview.openNextUnviewed",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ghPrReview.openDescription",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ghPrReview.hideViewed",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr && !config.ghPrReview.hideViewedFiles",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ghPrReview.showViewed",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr && config.ghPrReview.hideViewedFiles",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ghPrReview.viewAsList",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr && config.ghPrReview.fileLayout != list",
+          "group": "navigation@4"
+        },
+        {
+          "command": "ghPrReview.viewAsTree",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr && config.ghPrReview.fileLayout == list",
+          "group": "navigation@4"
+        },
+        {
+          "command": "ghPrReview.refresh",
+          "when": "view == ghPrReview.changes",
+          "group": "navigation@9"
+        },
+        {
+          "command": "ghPrReview.focusCheckedOutPr",
+          "when": "view == ghPrReview.changes && ghPrReview.canFocusCheckedOutPr",
+          "group": "navigation@0"
+        },
+        {
+          "command": "ghPrReview.submitReview",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr",
+          "group": "1_review@1"
+        },
+        {
+          "command": "ghPrReview.discardReview",
+          "when": "view == ghPrReview.changes && ghPrReview.hasPendingReview",
+          "group": "1_review@2"
+        },
+        {
+          "command": "ghPrReview.checkout",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr",
+          "group": "2_pr@1"
+        },
+        {
+          "command": "ghPrReview.openOnGitHub",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr",
+          "group": "2_pr@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ghPrReview.openChangesSinceViewed",
+          "when": "view == ghPrReview.changes && viewItem =~ /^file\\b.*\\bfullDefault\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "ghPrReview.openFullDiff",
+          "when": "view == ghPrReview.changes && viewItem =~ /^file\\b.*\\bsinceViewedDefault\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "ghPrReview.openLocalFile",
+          "when": "view == ghPrReview.changes && viewItem =~ /^file\\b.*\\blocal\\b/",
+          "group": "inline@2"
+        },
+        {
+          "command": "ghPrReview.openFullDiff",
+          "when": "view == ghPrReview.changes && viewItem =~ /^file\\b/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "ghPrReview.openChangesSinceViewed",
+          "when": "view == ghPrReview.changes && viewItem =~ /^file\\b.*\\bbaseline\\b/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "ghPrReview.compareWithCommit",
+          "when": "view == ghPrReview.changes && viewItem =~ /^file\\b/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "ghPrReview.openLocalFile",
+          "when": "view == ghPrReview.changes && viewItem =~ /^file\\b.*\\blocal\\b/",
+          "group": "1_open@4"
+        },
+        {
+          "command": "ghPrReview.markViewed",
+          "when": "view == ghPrReview.changes && viewItem =~ /^(file|folder)\\b.*\\bunviewed\\b/",
+          "group": "2_viewed@1"
+        },
+        {
+          "command": "ghPrReview.unmarkViewed",
+          "when": "view == ghPrReview.changes && viewItem =~ /^(file|folder)\\b.*\\bviewed\\b/",
+          "group": "2_viewed@2"
+        },
+        {
+          "command": "ghPrReview.copyPath",
+          "when": "view == ghPrReview.changes && viewItem =~ /^(file|folder)\\b/",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "ghPrReview.submitReview",
+          "when": "view == ghPrReview.changes && viewItem == pendingReview",
+          "group": "inline@1"
+        },
+        {
+          "command": "ghPrReview.discardReview",
+          "when": "view == ghPrReview.changes && viewItem == pendingReview",
+          "group": "1_review@1"
+        },
+        {
+          "command": "ghPrReview.checkout",
+          "when": "view == ghPrReview.prs && viewItem =~ /^pr\\b(?!.*\\bcheckedOut\\b)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "ghPrReview.openOnGitHub",
+          "when": "view == ghPrReview.prs && viewItem =~ /^pr\\b/",
+          "group": "inline@2"
+        },
+        {
+          "command": "ghPrReview.checkout",
+          "when": "view == ghPrReview.prs && viewItem =~ /^pr\\b(?!.*\\bcheckedOut\\b)/",
+          "group": "1_pr@1"
+        },
+        {
+          "command": "ghPrReview.openOnGitHub",
+          "when": "view == ghPrReview.prs && viewItem =~ /^pr\\b/",
+          "group": "1_pr@2"
+        },
+        {
+          "command": "ghPrReview.copyLink",
+          "when": "view == ghPrReview.prs && viewItem =~ /^pr\\b/",
+          "group": "2_copy@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "ghPrReview.markViewed",
+          "when": "resourcePath in ghPrReview.unviewedEditorPaths",
+          "group": "navigation@-3"
+        },
+        {
+          "command": "ghPrReview.unmarkViewed",
+          "when": "resourcePath in ghPrReview.viewedEditorPaths",
+          "group": "navigation@-3"
+        },
+        {
+          "command": "ghPrReview.markViewedAndNext",
+          "when": "resourcePath in ghPrReview.unviewedEditorPaths",
+          "group": "navigation@-2"
+        },
+        {
+          "command": "ghPrReview.toggleDiffMode",
+          "when": "resourcePath in ghPrReview.sinceViewedEditorPaths && isInDiffEditor",
+          "group": "navigation@-1"
+        },
+        {
+          "command": "ghPrReview.openLocalFile",
+          "when": "resourceScheme == ghpr",
+          "group": "navigation@0"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "ghPrReview.comment.addSingle",
+          "when": "commentController == ghPrReview && !ghPrReview.hasPendingReview",
+          "group": "inline@2"
+        },
+        {
+          "command": "ghPrReview.comment.startReview",
+          "when": "commentController == ghPrReview && !ghPrReview.hasPendingReview",
+          "group": "inline@1"
+        },
+        {
+          "command": "ghPrReview.comment.addToReview",
+          "when": "commentController == ghPrReview && ghPrReview.hasPendingReview",
+          "group": "inline@1"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "ghPrReview.comment.resolve",
+          "when": "commentController == ghPrReview && commentThread =~ /\\bcanResolve\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "ghPrReview.comment.unresolve",
+          "when": "commentController == ghPrReview && commentThread =~ /\\bcanUnresolve\\b/",
+          "group": "inline@1"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "ghPrReview.comment.edit",
+          "when": "commentController == ghPrReview && comment =~ /\\bcanEdit\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "ghPrReview.comment.delete",
+          "when": "commentController == ghPrReview && comment =~ /\\bcanDelete\\b/",
+          "group": "inline@2"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "ghPrReview.comment.save",
+          "when": "commentController == ghPrReview",
+          "group": "inline@1"
+        },
+        {
+          "command": "ghPrReview.comment.cancelEdit",
+          "when": "commentController == ghPrReview",
+          "group": "inline@2"
+        }
+      ]
+    },
+    "colors": [
+      {
+        "id": "ghPrReview.changedSinceViewedForeground",
+        "description": "Color of files that changed after you marked them as viewed.",
+        "defaults": {
+          "dark": "#4daafc",
+          "light": "#005fb8",
+          "highContrast": "#4daafc",
+          "highContrastLight": "#005fb8"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "GH PR Review",
+      "properties": {
+        "ghPrReview.queries": {
+          "type": "array",
+          "description": "The categories of the Pull Requests list. Each query uses the GitHub search syntax and is limited to the repository of the workspace.",
+          "items": {
+            "type": "object",
+            "required": ["label", "query"],
+            "properties": {
+              "label": { "type": "string", "description": "The name of the category." },
+              "query": {
+                "type": "string",
+                "description": "A GitHub search query, e.g. `is:open review-requested:@me`."
+              }
+            }
+          },
+          "default": [
+            { "label": "Waiting For My Review", "query": "is:open review-requested:@me" },
+            { "label": "Created By Me", "query": "is:open author:@me" },
+            { "label": "All Open", "query": "is:open" }
+          ]
+        },
+        "ghPrReview.refreshIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 15,
+          "description": "How often the pull requests are refreshed from GitHub while the window is focused."
+        },
+        "ghPrReview.fileLayout": {
+          "type": "string",
+          "enum": ["tree", "list"],
+          "default": "tree",
+          "description": "How the changed files of a pull request are shown."
+        },
+        "ghPrReview.hideViewedFiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Hide the files that are marked as viewed from the Changes view, so that only the files left to review are shown."
+        },
+        "ghPrReview.autoMarkNonRelevantChangesAsViewed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["lockfile", "renameOnly", "importsOnly"],
+            "enumDescriptions": [
+              "Lockfiles of package managers, e.g. pnpm-lock.yaml.",
+              "Files that were renamed or moved without a change in their content.",
+              "TypeScript and JavaScript files where only import statements changed."
+            ]
+          },
+          "default": [],
+          "markdownDescription": "The kinds of changes that are not relevant for a review and are marked as viewed automatically in the pull request that is open in the Changes view. Files with these changes always get an indicator in the tree, e.g. `imports only`. When a file changed after it was viewed, only the changes made since then count."
+        },
+        "ghPrReview.defaultDiff": {
+          "type": "string",
+          "enum": ["sinceViewed", "full"],
+          "enumDescriptions": [
+            "When a file changed after you marked it as viewed, open only the changes made since then.",
+            "Always open the full diff of the pull request."
+          ],
+          "default": "sinceViewed",
+          "description": "Which diff opens when you click a file that changed after you marked it as viewed."
+        },
+        "ghPrReview.useLocalFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use the file of the workspace as the right side of a diff when its content is the same as in the pull request, so that it can be edited and language features work."
+        },
+        "ghPrReview.authSource": {
+          "type": "string",
+          "enum": ["auto", "vscode", "gh-cli"],
+          "enumDescriptions": [
+            "Use the GitHub account of VS Code when it is already authorized, otherwise the token of the GitHub CLI.",
+            "Only use the GitHub account of VS Code.",
+            "Only use the token of the GitHub CLI (`gh auth token`)."
+          ],
+          "default": "auto",
+          "description": "Where the GitHub credentials come from."
+        }
+      }
+    }
+  }
+}
