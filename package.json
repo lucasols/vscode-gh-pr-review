@@ -103,8 +103,13 @@
       },
       {
         "view": "ghPrReview.changes",
-        "contents": "No pull request selected. Pick one from the Pull Requests list, or check out a branch that has a pull request.",
-        "when": "!ghPrReview.hasFocusedPr"
+        "contents": "Loading…",
+        "when": "!ghPrReview.hasFocusedPr && ghPrReview.findingBranchPr"
+      },
+      {
+        "view": "ghPrReview.changes",
+        "contents": "The current branch has no pull request. To see the changes of a pull request here, check out its branch.",
+        "when": "!ghPrReview.hasFocusedPr && !ghPrReview.findingBranchPr"
       }
     ],
     "commands": [
@@ -156,12 +161,6 @@
         "title": "Checkout Pull Request",
         "category": "GH PR Review",
         "icon": "$(arrow-right)"
-      },
-      {
-        "command": "ghPrReview.focusCheckedOutPr",
-        "title": "Show Checked Out Pull Request",
-        "category": "GH PR Review",
-        "icon": "$(home)"
       },
       {
         "command": "ghPrReview.openFile",
@@ -514,11 +513,6 @@
           "command": "ghPrReview.refresh",
           "when": "view == ghPrReview.changes",
           "group": "navigation@9"
-        },
-        {
-          "command": "ghPrReview.focusCheckedOutPr",
-          "when": "view == ghPrReview.changes && ghPrReview.canFocusCheckedOutPr",
-          "group": "navigation@0"
         },
         {
           "command": "ghPrReview.submitReview",

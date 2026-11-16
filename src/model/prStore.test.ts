@@ -109,6 +109,7 @@ function createHarness() {
     },
   }
   let persistedFocus: string | undefined
+  let persistedBranches: unknown
 
   function setRemoteViewed(paths: readonly string[], viewed: boolean) {
     remote.detail = {
@@ -178,23 +179,34 @@ function createHarness() {
     removeReviewRequests: vi.fn<StoreApi['removeReviewRequests']>(() => Promise.resolve()),
   } satisfies StoreApi
 
-  const store = new PrStore({
-    api,
-    baselines: new BaselineStore(storage),
-    getQueries: () => [{ label: 'All Open', query: 'is:open' }],
-    notify: (level, message) => notifications.push(`${level}: ${message}`),
-    log: () => undefined,
-    now: () => now,
-    persistedFocus: {
-      get: () => persistedFocus,
-      set: (key) => {
-        persistedFocus = key
+  const createStore = () =>
+    new PrStore({
+      api,
+      baselines: new BaselineStore(storage),
+      getQueries: () => [{ label: 'All Open', query: 'is:open' }],
+      notify: (level, message) => notifications.push(`${level}: ${message}`),
+      log: () => undefined,
+      now: () => now,
+      persistedFocus: {
+        get: () => persistedFocus,
+        set: (key) => {
+          persistedFocus = key
+        },
       },
-    },
-  })
+      persistedBranches: {
+        get: () => persistedBranches,
+        set: (records) => {
+          // the state of the workspace is stored as JSON
+          persistedBranches = JSON.parse(JSON.stringify(records))
+        },
+      },
+    })
+  const store = createStore()
 
   return {
     store,
+    /** A new window on the same workspace, with what the last one persisted */
+    restart: createStore,
     api,
     remote,
     notifications,
@@ -219,6 +231,9 @@ function createHarness() {
       }
     },
     getPersistedFocus: () => persistedFocus,
+    setPersistedFocus: (key: string) => {
+      persistedFocus = key
+    },
     viewedStates: () =>
       Object.fromEntries(
         (store.getDetail(KEY)?.files ?? []).map((f) => [f.path, f.viewedState]),
@@ -322,76 +337,127 @@ describe('status and lists', () => {
 })
 
 describe('focus', () => {
-  test('switching to a branch with a pull request focuses it', async () => {
-    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
+  const main: LocalRepo = { ...repo, branch: 'main', headSha: 'main-1' }
+
+  test('follows the branch to its pull request', async () => {
     h.remote.branchPrs = []
+    h.store.setRepos([main])
     await h.store.refreshAll()
     expect(h.store.focusedKey).toBeUndefined()
 
-    h.store.focus('acme/app#7')
     h.remote.branchPrs = [summary()]
     h.store.setRepos([repo])
+    expect(h.store.isFindingBranchPr).toBe(true)
     await h.store.refreshAll()
 
     expect(h.store.focusedKey).toBe(KEY)
+    expect(h.store.isFindingBranchPr).toBe(false)
   })
 
-  test('switching to a branch without a pull request clears the focus of the branch that was left', async () => {
+  test('a branch without a pull request clears the focus as soon as it is checked out', async () => {
     h.store.setRepos([repo])
     await h.store.refreshAll()
     expect(h.store.focusedKey).toBe(KEY)
 
     h.remote.branchPrs = []
-    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
-    await h.store.refreshAll()
-
-    expect(h.store.getCheckedOut('/work/app')).toBeUndefined()
+    h.store.setRepos([main])
     expect(h.store.focusedKey).toBeUndefined()
+    expect(h.store.getCheckedOut('/work/app')).toBeUndefined()
     expect(h.getPersistedFocus()).toBeUndefined()
+    expect(h.store.isFindingBranchPr).toBe(true)
+
+    await h.store.refreshAll()
+    expect(h.store.focusedKey).toBeUndefined()
+    expect(h.store.isFindingBranchPr).toBe(false)
   })
 
-  test('switching to a branch without a pull request keeps the pull request that the user picked', async () => {
+  test('a pull request of another branch cannot get the focus', async () => {
     h.store.setRepos([repo])
     await h.store.refreshAll()
     h.store.focus('acme/app#7')
+    expect(h.store.focusedKey).toBe(KEY)
 
     h.remote.branchPrs = []
-    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
+    h.store.setRepos([main])
+    await h.store.refreshAll()
+    h.store.focus('acme/app#7')
+    expect(h.store.focusedKey).toBeUndefined()
+  })
+
+  test('a new commit on the branch keeps the focus', async () => {
+    h.store.setRepos([repo])
+    await h.store.refreshAll()
+    const onFocus = vi.fn()
+    h.store.onDidChangeFocus(onFocus)
+
+    h.store.setRepos([{ ...repo, headSha: 'head-2' }])
     await h.store.refreshAll()
 
-    expect(h.store.focusedKey).toBe('acme/app#7')
+    expect(h.store.focusedKey).toBe(KEY)
+    expect(onFocus).not.toHaveBeenCalled()
   })
 
   test('a detached HEAD keeps the focus, because a rebase comes back to the branch', async () => {
     h.store.setRepos([repo])
     await h.store.refreshAll()
+    const onFocus = vi.fn()
+    h.store.onDidChangeFocus(onFocus)
 
     h.remote.branchPrs = []
     h.store.setRepos([{ ...repo, branch: undefined, headSha: 'rebase-1' }])
     await h.store.refreshAll()
+    expect(h.store.getCheckedOut('/work/app')).toBeUndefined()
+
+    h.remote.branchPrs = [summary()]
+    h.store.setRepos([{ ...repo, headSha: 'head-2' }])
+    await h.store.refreshAll()
 
     expect(h.store.focusedKey).toBe(KEY)
+    expect(onFocus).not.toHaveBeenCalled()
   })
 
-  test('the focus stays when the lists fail to load after a branch switch, and follows the branch on the next load', async () => {
+  test('a detached HEAD that ends on a branch without a pull request clears the focus', async () => {
     h.store.setRepos([repo])
     await h.store.refreshAll()
 
     h.remote.branchPrs = []
-    h.api.fetchLists.mockRejectedValueOnce(new Error('offline'))
-    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
-    await h.store.refreshLists()
+    h.store.setRepos([{ ...repo, branch: undefined, headSha: 'commit-1' }])
+    await h.store.refreshAll()
     expect(h.store.focusedKey).toBe(KEY)
 
-    await h.store.refreshLists()
+    h.store.setRepos([main])
     expect(h.store.focusedKey).toBeUndefined()
   })
 
-  test('a branch switch while the lists load focuses the pull request of the new branch', async () => {
-    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
-    h.remote.branchPrs = []
+  test('a failed load keeps the pull request of the branch', async () => {
+    h.store.setRepos([repo])
     await h.store.refreshAll()
-    h.store.focus('acme/app#7')
+
+    h.api.fetchLists.mockRejectedValueOnce(new Error('offline'))
+    await h.store.refreshLists()
+
+    expect(h.store.focusedKey).toBe(KEY)
+  })
+
+  test('after a failed load, the pull request of the new branch gets the focus on the next one', async () => {
+    h.remote.branchPrs = []
+    h.store.setRepos([main])
+    await h.store.refreshAll()
+
+    h.remote.branchPrs = [summary()]
+    h.api.fetchLists.mockRejectedValueOnce(new Error('offline'))
+    h.store.setRepos([repo])
+    await h.store.refreshLists()
+    expect(h.store.focusedKey).toBeUndefined()
+    expect(h.store.isFindingBranchPr).toBe(false)
+
+    await h.store.refreshLists()
+    expect(h.store.focusedKey).toBe(KEY)
+  })
+
+  test('a load that started before a branch switch does not bring back the pull request of the branch that was left', async () => {
+    h.store.setRepos([repo])
+    await h.store.refreshAll()
 
     const lists = await h.api.fetchLists(repo.github, [])
     let release: () => void = () => undefined
@@ -403,27 +469,115 @@ describe('focus', () => {
     )
     const outdated = h.store.refreshLists()
 
-    h.remote.branchPrs = [summary()]
-    h.store.setRepos([repo])
+    h.remote.branchPrs = []
+    h.store.setRepos([main])
     const latest = h.store.refreshLists()
     release()
     await outdated
     expect(h.store.getCheckedOut('/work/app')).toBeUndefined()
-    await latest
+    expect(h.store.focusedKey).toBeUndefined()
+    expect(h.store.isFindingBranchPr).toBe(true)
 
-    expect(h.store.focusedKey).toBe(KEY)
+    await latest
+    expect(h.store.focusedKey).toBeUndefined()
+    expect(h.store.isFindingBranchPr).toBe(false)
   })
 
-  test('a refresh without a branch change keeps the pull request that the user picked', async () => {
-    h.store.setRepos([repo])
-    await h.store.refreshAll()
+  test('with several repositories, the branch that was switched gets the focus, and the other can be picked', async () => {
+    const lib: LocalRepo = {
+      rootPath: '/work/lib',
+      github: { owner: 'acme', name: 'lib' },
+      remotes: [{ name: 'origin', repo: { owner: 'acme', name: 'lib' } }],
+      branch: 'main',
+      headSha: 'lib-main-1',
+    }
+    const libPr = summary({
+      id: 'PR_9',
+      repo: 'acme/lib',
+      number: 9,
+      headRefName: 'fix/lib',
+      headRefOid: 'lib-1',
+    })
+    h.api.fetchBranchPrs.mockImplementation((target, branch) =>
+      Promise.resolve(
+        target.name === 'lib' ?
+          branch === 'fix/lib' ?
+            [libPr]
+          : []
+        : h.remote.branchPrs,
+      ),
+    )
 
-    h.store.focus('acme/app#7')
+    h.store.setRepos([repo, lib])
     await h.store.refreshAll()
-    h.store.setRepos([{ ...repo, headSha: 'head-2' }])
-    await h.store.refreshAll()
+    expect(h.store.focusedKey).toBe(KEY)
 
-    expect(h.store.focusedKey).toBe('acme/app#7')
+    h.store.setRepos([repo, { ...lib, branch: 'fix/lib', headSha: 'lib-1' }])
+    expect(h.store.focusedKey).toBe(KEY)
+    await h.store.refreshAll()
+    expect(h.store.focusedKey).toBe('acme/lib#9')
+
+    h.store.focus(KEY)
+    await h.store.refreshAll()
+    expect(h.store.focusedKey).toBe(KEY)
+
+    h.store.setRepos([
+      { ...repo, branch: 'main', headSha: 'main-1' },
+      { ...lib, branch: 'fix/lib', headSha: 'lib-1' },
+    ])
+    expect(h.store.focusedKey).toBe('acme/lib#9')
+  })
+
+  describe('after a restart', () => {
+    test('the same branch shows its pull request right away', async () => {
+      h.store.setRepos([repo])
+      await h.store.refreshAll()
+
+      const store = h.restart()
+      expect(store.focusedKey).toBe(KEY)
+      store.setRepos([])
+      expect(store.focusedKey).toBe(KEY)
+      store.setRepos([repo])
+      expect(store.focusedKey).toBe(KEY)
+      expect(store.isFindingBranchPr).toBe(false)
+    })
+
+    test('a branch that was switched while the window was closed gets the focus', async () => {
+      h.remote.branchPrs = []
+      h.store.setRepos([main])
+      await h.store.refreshAll()
+
+      h.remote.branchPrs = [summary()]
+      const store = h.restart()
+      store.setRepos([repo])
+      await store.refreshAll()
+
+      expect(store.focusedKey).toBe(KEY)
+    })
+
+    test('the pull request of a branch that was left while the window was closed is not shown', async () => {
+      h.store.setRepos([repo])
+      await h.store.refreshAll()
+
+      h.remote.branchPrs = []
+      const store = h.restart()
+      store.setRepos([main])
+      expect(store.focusedKey).toBeUndefined()
+
+      await store.refreshAll()
+      expect(store.focusedKey).toBeUndefined()
+    })
+
+    test('a focus that was stored without the branch waits for the pull request of the branch', async () => {
+      h.setPersistedFocus('acme/app#7')
+
+      const store = h.restart()
+      store.setRepos([repo])
+      expect(store.focusedKey).toBeUndefined()
+
+      await store.refreshAll()
+      expect(store.focusedKey).toBe(KEY)
+    })
   })
 })
 

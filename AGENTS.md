@@ -41,6 +41,9 @@ src/
   `getChildren` and `getTreeItem` must stay synchronous and free of network.
 - Tree items need a stable `id`, otherwise the tree loses its state on refresh.
 - The store fires a change event only when the data really changed.
+- The Changes view shows only the pull request of the checked-out branch
+  (`PrStore.focusedKey`). Nothing else can pick a pull request for it. While
+  the HEAD is detached, the one of the last branch stays.
 - Responses of GitHub are parsed with zod (`github/schemas.ts`), never cast.
 - Every setting, command and menu is declared in `package.json`. The host test
   fails when a command is declared but not registered, or the other way around.

@@ -204,7 +204,15 @@ function renderHeader(state: OverviewState): void {
         }),
       h(
         'button',
-        { onclick: () => send({ type: 'reviewChanges' }) },
+        {
+          onclick: () => send({ type: 'reviewChanges' }),
+          // the Changes view only shows the pull request of the current branch
+          disabled: !state.isCheckedOut,
+          title:
+            state.isCheckedOut ? undefined : (
+              'Check out the branch to review the changes in the side bar'
+            ),
+        },
         `Review changes (${state.viewedCount}/${state.fileCount} viewed)`,
       ),
       actionButton('refresh', 'Refresh', 'Refreshing…', () => send({ type: 'refresh' })),

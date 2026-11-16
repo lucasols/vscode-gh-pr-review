@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type { GitHubApi, DiffCache, ListQuery, PrCategory, PrCommit } from '../github/api'
 import { GitHubError } from '../github/client'
 import { SerialTask, errorMessage } from '../util/async'
@@ -85,7 +86,23 @@ export type StoreDeps = {
     get: () => string | undefined
     set: (key: string | undefined) => void
   }
+  /** Survives a restart, like the focus. What `get` returns is validated */
+  persistedBranches: {
+    get: () => unknown
+    set: (records: BranchRecords) => void
+  }
 }
+
+/**
+ * The last branch of each repository whose pull request was looked up, and the
+ * pull request that was found. A detached HEAD does not replace the record.
+ */
+const branchRecordsSchema = z.record(
+  z.string(),
+  z.object({ branch: z.string(), pr: z.string().optional() }),
+)
+export type BranchRecords = z.infer<typeof branchRecordsSchema>
+type BranchRecord = BranchRecords[string]
 
 export type CommentTarget =
   | {
@@ -126,8 +143,8 @@ export class PrStore {
   private readonly lists = new Map<string, RepoLists>()
   private listsJson = ''
   private readonly checkedOut = new Map<string, PrSummary>()
-  private readonly pendingBranchFocus = new Set<string>()
-  private isFirstRepos = true
+  private readonly branchRecords: Map<string, BranchRecord>
+  private branchRecordsJson: string
 
   private readonly details = new Map<string, PrDetail>()
   private readonly detailJson = new Map<string, string>()
@@ -143,6 +160,9 @@ export class PrStore {
 
   constructor(private readonly deps: StoreDeps) {
     this.focused = deps.persistedFocus.get()
+    const records = branchRecordsSchema.safeParse(deps.persistedBranches.get())
+    this.branchRecords = new Map(records.success ? Object.entries(records.data) : [])
+    this.branchRecordsJson = JSON.stringify([...this.branchRecords])
     this.listsTask = new SerialTask(() => this.loadLists())
   }
 
@@ -157,8 +177,43 @@ export class PrStore {
     return this.viewerLogin
   }
 
+  /**
+   * The pull request of the Changes view, which is always the one of the
+   * current branch. With several repositories it is one of theirs.
+   */
   get focusedKey(): string | undefined {
     return this.focused
+  }
+
+  /** True while the pull request of a branch that was just checked out is looked up */
+  get isFindingBranchPr(): boolean {
+    if (!this.gitReady) return true
+    return this.repos.some(
+      (repo) =>
+        repo.branch !== undefined &&
+        this.branchRecords.get(repo.rootPath)?.branch !== repo.branch &&
+        this.lists.get(repo.rootPath)?.error === undefined,
+    )
+  }
+
+  /** The pull requests of the current branches, as far as they are known */
+  private branchPrKeys(): string[] {
+    const keys: string[] = []
+    for (const repo of this.repos) {
+      const record = this.branchRecords.get(repo.rootPath)
+      // a detached HEAD is usually a rebase, which comes back to the branch.
+      // After a switch, the pull request of the new branch is not known yet.
+      const isCurrent = repo.branch === undefined || record?.branch === repo.branch
+      if (isCurrent && record?.pr !== undefined) keys.push(record.pr)
+    }
+    return keys
+  }
+
+  /** Moves the focus away from a pull request that is not the one of a current branch */
+  private syncFocus(): void {
+    const keys = this.branchPrKeys()
+    if (this.focused !== undefined && keys.includes(this.focused)) return
+    this.setFocus(keys[0])
   }
 
   getRepos(): readonly LocalRepo[] {
@@ -244,29 +299,35 @@ export class PrStore {
     this.gitReady = true
     this.repos = repos
 
-    for (const repo of repos) {
-      const before = previous.get(repo.rootPath)
-      const branchChanged = before ? before.branch !== repo.branch : true
-      // after a branch switch the pull request of the new branch gets the focus.
-      // On startup the pull request that was focused before is kept.
-      if (branchChanged && !(this.isFirstRepos && this.focused)) {
-        this.pendingBranchFocus.add(repo.rootPath)
-      }
-    }
-    if (repos.length > 0) this.isFirstRepos = false
-
     for (const rootPath of [...this.lists.keys()]) {
       if (!repos.some((repo) => repo.rootPath === rootPath)) {
         this.lists.delete(rootPath)
         this.checkedOut.delete(rootPath)
       }
     }
+    for (const repo of repos) {
+      const before = previous.get(repo.rootPath)
+      if (before && before.branch !== repo.branch) this.checkedOut.delete(repo.rootPath)
+    }
+
+    // the pull request of a branch that was left is not shown anymore, also
+    // when the branch was switched while the window was closed. Before git
+    // finds the repositories, the focus of the last session is kept.
+    if (repos.length > 0 || previous.size > 0) this.syncFocus()
 
     if (!wasReady || previous.size !== repos.length) this.statusEmitter.fire()
     this.listsEmitter.fire()
   }
 
-  focus(key: string | undefined): void {
+  /**
+   * Picks which pull request the Changes view shows when several repositories
+   * have one for their branch. Other pull requests are ignored.
+   */
+  focus(key: string): void {
+    if (this.branchPrKeys().includes(key)) this.setFocus(key)
+  }
+
+  private setFocus(key: string | undefined): void {
     if (this.focused === key) return
     this.focused = key
     this.deps.persistedFocus.set(key)
@@ -361,10 +422,8 @@ export class PrStore {
     if (repos.length === 0) return
     const queries = this.deps.getQueries()
     const outcome = { authFailed: false, anySucceeded: false }
-    /** The pull request that each repository had checked out before this load */
-    const left = new Map<string, PrSummary | undefined>()
-    /** The repositories whose branch is still the one that was loaded */
-    const current = new Set<string>()
+    /** The pull request of the branch that each repository had when the load started */
+    const found = new Map<string, PrSummary | undefined>()
 
     await Promise.all(
       repos.map(async (repo) => {
@@ -384,15 +443,7 @@ export class PrStore {
           outcome.anySucceeded = true
           this.viewerLogin = lists.viewer
           this.lists.set(repo.rootPath, { categories: lists.categories, error: undefined })
-
-          // the branch can change while the lists load. Then the pull request
-          // that was found is the one of the branch that was left
-          const latest = this.repos.find((item) => item.rootPath === repo.rootPath)
-          if (latest?.branch !== repo.branch) return
-          current.add(repo.rootPath)
-          left.set(repo.rootPath, this.checkedOut.get(repo.rootPath))
-          if (checkedOut) this.checkedOut.set(repo.rootPath, checkedOut)
-          else this.checkedOut.delete(repo.rootPath)
+          found.set(repo.rootPath, checkedOut)
         } catch (error) {
           if (error instanceof GitHubError && error.kind === 'auth') {
             outcome.authFailed = true
@@ -406,6 +457,20 @@ export class PrStore {
       }),
     )
 
+    // the branch can change while the lists load. Then the pull request that
+    // was found is the one of the branch that was left, and a failed load says
+    // nothing about the branch
+    const current: LocalRepo[] = []
+    for (const loaded of repos) {
+      if (!found.has(loaded.rootPath)) continue
+      const repo = this.repos.find((item) => item.rootPath === loaded.rootPath)
+      if (!repo || repo.branch !== loaded.branch) continue
+      current.push(repo)
+      const pr = found.get(repo.rootPath)
+      if (pr) this.checkedOut.set(repo.rootPath, pr)
+      else this.checkedOut.delete(repo.rootPath)
+    }
+
     // the repositories can change while the lists load
     for (const rootPath of [...this.lists.keys()]) {
       if (!this.repos.some((repo) => repo.rootPath === rootPath)) {
@@ -417,41 +482,32 @@ export class PrStore {
     if (outcome.authFailed) this.setAuthFailed(true)
     else if (outcome.anySucceeded) this.setAuthFailed(false)
 
-    const json = JSON.stringify([[...this.lists], [...this.checkedOut]])
+    // the focus follows the branch
+    let switchedTo: string | undefined
+    for (const repo of current) {
+      if (repo.branch === undefined) continue
+      const pr = this.checkedOut.get(repo.rootPath)
+      const key = pr ? summaryKey(pr) : undefined
+      const before = this.branchRecords.get(repo.rootPath)
+      if (before && before.branch !== repo.branch && key !== undefined) switchedTo = key
+      this.branchRecords.set(repo.rootPath, { branch: repo.branch, pr: key })
+    }
+
+    const recordsJson = JSON.stringify([...this.branchRecords])
+    if (recordsJson !== this.branchRecordsJson) {
+      this.branchRecordsJson = recordsJson
+      this.deps.persistedBranches.set(Object.fromEntries(this.branchRecords))
+    }
+
+    const json = JSON.stringify([[...this.lists], [...this.checkedOut], recordsJson])
     if (json !== this.listsJson) {
       this.listsJson = json
       this.listsEmitter.fire()
     }
 
-    // the focus follows the branch
-    for (const rootPath of [...this.pendingBranchFocus]) {
-      if (!this.repos.some((repo) => repo.rootPath === rootPath)) {
-        this.pendingBranchFocus.delete(rootPath)
-        continue
-      }
-      // a failed or outdated load says nothing about the new branch
-      if (!current.has(rootPath)) continue
-      this.pendingBranchFocus.delete(rootPath)
-
-      const pr = this.checkedOut.get(rootPath)
-      if (pr) {
-        this.focus(summaryKey(pr))
-        continue
-      }
-      // the new branch has no pull request. The pull request of the branch
-      // that was left loses the focus, one that the user picked keeps it. A
-      // detached HEAD is usually a rebase, which comes back to the branch.
-      const previous = left.get(rootPath)
-      const branch = this.repos.find((repo) => repo.rootPath === rootPath)?.branch
-      if (previous && branch !== undefined && this.focused === summaryKey(previous)) {
-        this.focus(undefined)
-      }
-    }
-
-    if (!this.focused) {
-      const [first] = this.checkedOut.values()
-      if (first) this.focus(summaryKey(first))
-    }
+    // with several repositories, the one whose branch was switched wins
+    if (switchedTo !== undefined) this.setFocus(switchedTo)
+    else this.syncFocus()
   }
 
   private async loadDetail(key: string): Promise<void> {

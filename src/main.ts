@@ -27,6 +27,7 @@ import { PrListView } from './views/prListView'
 import { PrStatusBar } from './views/statusBar'
 
 const FOCUS_KEY = 'focusedPr'
+const BRANCHES_KEY = 'branches'
 const REFRESH_ON_FOCUS_AFTER_MS = 20_000
 
 /** What the tests of the extension host can inspect */
@@ -66,6 +67,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
         return typeof value === 'string' ? value : undefined
       },
       set: (key) => void context.workspaceState.update(FOCUS_KEY, key),
+    },
+    persistedBranches: {
+      get: () => context.workspaceState.get(BRANCHES_KEY),
+      set: (records) => void context.workspaceState.update(BRANCHES_KEY, records),
     },
   })
 
@@ -124,15 +129,11 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   const updateContext = debounce(() => {
     const focused = store.focusedKey
     const detail = focused ? store.getDetail(focused) : undefined
-    const checkedOut = store.getCheckedOutKeys()
 
     setContext('state', store.status)
     setContext('hasFocusedPr', focused !== undefined)
     setContext('hasPendingReview', detail?.pendingReview !== undefined)
-    setContext(
-      'canFocusCheckedOutPr',
-      checkedOut.length > 0 && !checkedOut.includes(focused ?? ''),
-    )
+    setContext('findingBranchPr', store.isFindingBranchPr)
 
     // the editors of the files of the focused pull request get review buttons
     const unviewed: Record<string, boolean> = {}

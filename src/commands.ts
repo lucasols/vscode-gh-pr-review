@@ -214,7 +214,6 @@ export function registerCommands(
     if (!repo) return
 
     const prKey = `${repoKey(repo.github)}#${input.trim().replace('#', '')}`
-    store.focus(prKey)
     views.panels.open(prKey)
   }
 
@@ -267,18 +266,13 @@ export function registerCommands(
       const prKey = resolvePrKey(arg)
       if (!prKey) return
       try {
+        // the Changes view follows the branch
         await checkoutPr(services, prKey)
-        store.focus(prKey)
       } catch (error) {
         void vscode.window.showErrorMessage(
           `Could not check out the pull request: ${errorMessage(error)}`,
         )
       }
-    },
-
-    'ghPrReview.focusCheckedOutPr': () => {
-      const [prKey] = store.getCheckedOutKeys()
-      if (prKey) store.focus(prKey)
     },
 
     'ghPrReview.openFile': async (prKey, path) => {

@@ -122,8 +122,9 @@ export async function run(): Promise<void> {
   await vscode.commands.executeCommand('ghPrReview.openDescription')
 
   // the overview tab opens and its page loads
+  // the Changes view keeps showing the pull request of the branch
   await vscode.commands.executeCommand('ghPrReview.openPr', 'acme/app#1')
-  assert.equal(api.services.store.focusedKey, 'acme/app#1')
+  assert.equal(api.services.store.focusedKey, undefined)
   await waitFor('the overview tab', () =>
     vscode.window.tabGroups.all.some((group) =>
       group.tabs.some((tab) => tab.input instanceof vscode.TabInputWebview),

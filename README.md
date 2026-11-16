@@ -15,12 +15,12 @@ Pull Requests extension that is built around two things:
 - **Pull Requests view**: the open pull requests of the repository, grouped by
   the searches of `ghPrReview.queries` (waiting for my review, created by me,
   all open).
-- **Changes view**: the files of one pull request as a tree or a list, with a
-  checkbox to mark each file or folder as viewed. Viewed files can be hidden
-  with the eye button. The view follows the checked-out branch: after a branch
-  switch it shows the pull request of the new branch, or nothing when the
-  branch has none. A pull request picked from the list stays until a branch
-  with a pull request is checked out.
+- **Changes view**: the files of the pull request of the checked-out branch as
+  a tree or a list, with a checkbox to mark each file or folder as viewed.
+  Viewed files can be hidden with the eye button. The view follows the branch:
+  after a switch, also one made while the window was closed, it shows the pull
+  request of the new branch, or nothing when the branch has none. To see
+  another pull request here, check out its branch.
 - **Diffs**: against the merge base, like on GitHub. When the pull request is
   checked out, the right side is the file of the workspace, so it can be
   edited and has full language support.
