@@ -3,7 +3,7 @@ import type { Services } from '../services'
 
 /**
  * Shows the pull request of the checked-out branch next to the branch name in
- * the status bar. A click opens its overview.
+ * the status bar. A click opens its overview and its changes in the side bar.
  */
 export class PrStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem
@@ -45,8 +45,8 @@ export class PrStatusBar implements vscode.Disposable {
     tooltip.appendText(`${pr.repo}#${pr.number} · ${pr.headRefName} → ${pr.baseRefName}`)
     this.item.tooltip = tooltip
     this.item.command = {
-      command: 'ghPrReview.openPr',
-      title: 'Open Pull Request',
+      command: 'ghPrReview.reviewPr',
+      title: 'Review Pull Request',
       arguments: [prKey],
     }
     this.item.show()

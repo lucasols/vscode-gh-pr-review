@@ -125,6 +125,11 @@
         "category": "GH PR Review"
       },
       {
+        "command": "ghPrReview.reviewPr",
+        "title": "Review Pull Request",
+        "category": "GH PR Review"
+      },
+      {
         "command": "ghPrReview.openPrByNumber",
         "title": "Open Pull Request by Number…",
         "category": "GH PR Review"
@@ -325,6 +330,10 @@
       "commandPalette": [
         {
           "command": "ghPrReview.openPr",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.reviewPr",
           "when": "false"
         },
         {

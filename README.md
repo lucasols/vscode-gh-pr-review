@@ -33,7 +33,8 @@ Pull Requests extension that is built around two things:
 - **Comments**: review threads are shown in the diffs and in the files of the
   workspace. Add single comments, start a review, reply, edit, delete and
   resolve.
-- **Status bar**: the pull request of the checked-out branch.
+- **Status bar**: the pull request of the checked-out branch. A click opens its
+  overview and its changes in the side bar.
 
 ### Changes since viewed
 

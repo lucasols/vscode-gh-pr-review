@@ -233,6 +233,15 @@ export function registerCommands(
       views.panels.open(prKey)
     },
 
+    'ghPrReview.reviewPr': async (arg) => {
+      const prKey = resolvePrKey(arg)
+      if (!prKey) return
+      store.focus(prKey)
+      // the side bar first, so that the overview ends up with the keyboard focus
+      await vscode.commands.executeCommand('ghPrReview.changes.focus')
+      views.panels.open(prKey)
+    },
+
     'ghPrReview.openPrByNumber': openPrByNumber,
 
     'ghPrReview.openDescription': (arg) => {
