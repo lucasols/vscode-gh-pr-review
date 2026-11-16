@@ -1,3 +1,4 @@
+import { getMergeBlock } from '../model/mergeBlock'
 import type { PrDetail } from '../model/types'
 import type { OverviewState } from '../shared/overviewProtocol'
 
@@ -55,6 +56,10 @@ export function buildOverviewState(args: {
     mergeStateStatus: overview.mergeStateStatus,
     mergeMethods: overview.allowedMergeMethods,
     defaultMergeMethod: overview.defaultMergeMethod,
+    mergeBlock: getMergeBlock(detail),
+    autoMerge: overview.autoMerge,
+    canEnableAutoMerge: overview.viewerCanEnableAutoMerge,
+    canDisableAutoMerge: overview.viewerCanDisableAutoMerge,
     viewerCanUpdate: overview.viewerCanUpdate,
     viewerDidAuthor: overview.viewerDidAuthor,
     pendingReviewComments: detail.pendingReview?.commentCount,

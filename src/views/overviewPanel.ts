@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 import type { Disposable } from '../util/emitter'
+import { getMergeBlock } from '../model/mergeBlock'
 import type { MergeMethod, PrDetail, ReviewEvent } from '../model/types'
 import type { Services } from '../services'
 import {
@@ -207,6 +208,16 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
         await this.merge(prKey, open, message.method)
         return
 
+      case 'enableAutoMerge':
+        await this.enableAutoMerge(prKey, open, message.method)
+        return
+
+      case 'disableAutoMerge':
+        await this.run(open, 'disableAutoMerge', 'Could not disable auto-merge', () =>
+          store.disableAutoMerge(prKey),
+        )
+        return
+
       case 'readyForReview':
         await this.run(open, 'readyForReview', 'Could not update the pull request', () =>
           store.markReadyForReview(prKey),
@@ -230,7 +241,17 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
     if (!detail) return
     const { summary } = detail
 
+    // the page disables the button, but its state can be older than the store
+    const block = getMergeBlock(detail)
+    if (block && !block.canBypass) {
+      void vscode.window.showErrorMessage(
+        `Could not merge the pull request: ${block.reason}.`,
+      )
+      return
+    }
+
     const warnings: string[] = []
+    if (block) warnings.push(`${block.reason}. This merge bypasses it.`)
     if (summary.checkState === 'FAILURE') warnings.push('Some checks failed.')
     if (summary.checkState === 'PENDING') warnings.push('Some checks are still running.')
     if (summary.reviewDecision === 'CHANGES_REQUESTED') warnings.push('Changes were requested.')
@@ -252,6 +273,33 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
         `Merged #${summary.number} into ${summary.baseRefName}.`,
       )
     })
+  }
+
+  private async enableAutoMerge(
+    prKey: string,
+    open: OpenPanel,
+    method: MergeMethod,
+  ): Promise<void> {
+    const detail = this.services.store.getDetail(prKey)
+    if (!detail) return
+    const { summary } = detail
+
+    const choice = await vscode.window.showWarningMessage(
+      `Enable auto-merge of #${summary.number} into ${summary.baseRefName} with ${MERGE_VERBS[method]}?`,
+      {
+        modal: true,
+        detail: [
+          summary.title,
+          'GitHub merges the pull request on its own when its requirements are met.',
+        ].join('\n'),
+      },
+      'Enable Auto-Merge',
+    )
+    if (choice !== 'Enable Auto-Merge') return
+
+    await this.run(open, 'enableAutoMerge', 'Could not enable auto-merge', () =>
+      this.services.store.enableAutoMerge(prKey, method),
+    )
   }
 
   private async submitReview(

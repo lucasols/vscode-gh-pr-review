@@ -100,6 +100,28 @@ export const overviewStateSchema = z.object({
   mergeStateStatus: z.string(),
   mergeMethods: z.array(mergeMethodSchema),
   defaultMergeMethod: mergeMethodSchema,
+  /** Why the viewer cannot merge now. Not set when they can */
+  mergeBlock: z
+    .object({
+      kind: z.enum([
+        'closed',
+        'draft',
+        'permission',
+        'noMethod',
+        'conflicts',
+        'checking',
+        'rules',
+      ]),
+      reason: z.string(),
+      canBypass: z.boolean(),
+    })
+    .optional(),
+  /** Set while GitHub waits for the requirements to merge on its own */
+  autoMerge: z
+    .object({ mergeMethod: mergeMethodSchema, enabledBy: z.string().optional() })
+    .optional(),
+  canEnableAutoMerge: z.boolean(),
+  canDisableAutoMerge: z.boolean(),
   viewerCanUpdate: z.boolean(),
   viewerDidAuthor: z.boolean(),
   pendingReviewComments: z.number().optional(),
@@ -135,6 +157,8 @@ export const fromWebviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('openOnGitHub') }),
   z.object({ type: z.literal('copyLink') }),
   z.object({ type: z.literal('merge'), method: mergeMethodSchema }),
+  z.object({ type: z.literal('enableAutoMerge'), method: mergeMethodSchema }),
+  z.object({ type: z.literal('disableAutoMerge') }),
   z.object({ type: z.literal('readyForReview') }),
   z.object({ type: z.literal('comment'), body: z.string() }),
   z.object({ type: z.literal('review'), event: reviewEventSchema, body: z.string() }),

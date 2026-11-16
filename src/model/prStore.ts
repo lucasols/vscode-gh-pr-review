@@ -59,6 +59,8 @@ export type StoreApi = Pick<
   | 'setThreadResolved'
   | 'addIssueComment'
   | 'merge'
+  | 'enableAutoMerge'
+  | 'disableAutoMerge'
   | 'markReadyForReview'
 >
 
@@ -669,6 +671,23 @@ export class PrStore {
       expectedHeadOid: detail.summary.headRefOid,
     })
     await Promise.all([this.refreshDetail(key), this.refreshLists()])
+  }
+
+  /** The pull request can merge at once, when it already meets its requirements */
+  async enableAutoMerge(key: string, mergeMethod: MergeMethod): Promise<void> {
+    const detail = this.requireDetail(key)
+    await this.deps.api.enableAutoMerge({
+      pullRequestId: detail.summary.id,
+      mergeMethod,
+      expectedHeadOid: detail.summary.headRefOid,
+    })
+    await Promise.all([this.refreshDetail(key), this.refreshLists()])
+  }
+
+  async disableAutoMerge(key: string): Promise<void> {
+    const detail = this.requireDetail(key)
+    await this.deps.api.disableAutoMerge(detail.summary.id)
+    await this.refreshDetail(key)
   }
 
   async markReadyForReview(key: string): Promise<void> {

@@ -268,6 +268,15 @@ const prDetailNodeSchema = prSummarySchema.extend({
   mergeStateStatus: z.string(),
   viewerCanUpdate: z.boolean(),
   viewerDidAuthor: z.boolean(),
+  viewerCanMergeAsAdmin: z.boolean(),
+  viewerCanEnableAutoMerge: z.boolean(),
+  viewerCanDisableAutoMerge: z.boolean(),
+  autoMergeRequest: z
+    .object({
+      mergeMethod: z.string(),
+      enabledBy: z.object({ login: z.string() }).nullable(),
+    })
+    .nullable(),
   mergedBy: z.object({ login: z.string() }).nullable(),
   labels: z
     .object({
@@ -330,6 +339,7 @@ export const prDetailSchema = z.object({
       squashMergeAllowed: z.boolean(),
       rebaseMergeAllowed: z.boolean(),
       viewerDefaultMergeMethod: z.string(),
+      viewerPermission: z.string().nullable(),
       pullRequest: prDetailNodeSchema.nullable(),
     })
     .nullable(),
@@ -341,6 +351,7 @@ export type RawRepoSettings = Pick<
   | 'squashMergeAllowed'
   | 'rebaseMergeAllowed'
   | 'viewerDefaultMergeMethod'
+  | 'viewerPermission'
 >
 
 export const prFilesPageSchema = z.object({
@@ -689,6 +700,9 @@ function toMergeMethod(value: string): MergeMethod | undefined {
   }
 }
 
+/** The permissions on a repository that include merging its pull requests */
+const MERGE_PERMISSIONS = new Set(['ADMIN', 'MAINTAIN', 'WRITE'])
+
 export function toPrOverview(raw: RawPrDetail, repo: RawRepoSettings): PrOverview {
   const allowedMergeMethods: MergeMethod[] = []
   if (repo.mergeCommitAllowed) allowedMergeMethods.push('MERGE')
@@ -701,6 +715,9 @@ export function toPrOverview(raw: RawPrDetail, repo: RawRepoSettings): PrOvervie
       preferred
     : (allowedMergeMethods[0] ?? 'MERGE')
 
+  const autoMergeMethod =
+    raw.autoMergeRequest ? toMergeMethod(raw.autoMergeRequest.mergeMethod) : undefined
+
   return {
     bodyHtml: raw.bodyHTML,
     createdAt: raw.createdAt,
@@ -710,6 +727,14 @@ export function toPrOverview(raw: RawPrDetail, repo: RawRepoSettings): PrOvervie
     mergeStateStatus: raw.mergeStateStatus,
     viewerCanUpdate: raw.viewerCanUpdate,
     viewerDidAuthor: raw.viewerDidAuthor,
+    viewerCanMerge: MERGE_PERMISSIONS.has(repo.viewerPermission ?? ''),
+    viewerCanMergeAsAdmin: raw.viewerCanMergeAsAdmin,
+    viewerCanEnableAutoMerge: raw.viewerCanEnableAutoMerge,
+    viewerCanDisableAutoMerge: raw.viewerCanDisableAutoMerge,
+    autoMerge:
+      autoMergeMethod ?
+        { mergeMethod: autoMergeMethod, enabledBy: raw.autoMergeRequest?.enabledBy?.login }
+      : undefined,
     mergedBy: raw.mergedBy?.login,
     labels: (raw.labels?.nodes ?? []).flatMap((label) => (label ? [label] : [])),
     assignees: raw.assignees.nodes.flatMap((assignee) => {

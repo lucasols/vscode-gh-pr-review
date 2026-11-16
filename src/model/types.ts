@@ -144,6 +144,14 @@ export type PrOverview = {
   mergeStateStatus: string
   viewerCanUpdate: boolean
   viewerDidAuthor: boolean
+  /** The viewer can write to the repository, which merging needs */
+  viewerCanMerge: boolean
+  /** The viewer can merge although the rules of the base branch are not met */
+  viewerCanMergeAsAdmin: boolean
+  viewerCanEnableAutoMerge: boolean
+  viewerCanDisableAutoMerge: boolean
+  /** Set while GitHub waits for the requirements to merge on its own */
+  autoMerge: { mergeMethod: MergeMethod; enabledBy: string | undefined } | undefined
   mergedBy: string | undefined
   labels: { name: string; color: string }[]
   assignees: Actor[]

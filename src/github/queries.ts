@@ -107,6 +107,7 @@ export const PR_DETAIL_QUERY = /* GraphQL */ `
       squashMergeAllowed
       rebaseMergeAllowed
       viewerDefaultMergeMethod
+      viewerPermission
       pullRequest(number: $number) {
         ...PrSummary
         bodyHTML
@@ -118,6 +119,10 @@ export const PR_DETAIL_QUERY = /* GraphQL */ `
         mergeStateStatus
         viewerCanUpdate
         viewerDidAuthor
+        viewerCanMergeAsAdmin
+        viewerCanEnableAutoMerge
+        viewerCanDisableAutoMerge
+        autoMergeRequest { mergeMethod enabledBy { login } }
         mergedBy { login }
         labels(first: 30) { nodes { name color } }
         assignees(first: 20) { nodes { ${ACTOR} } }
@@ -385,6 +390,22 @@ export const MERGE_MUTATION = /* GraphQL */ `
   }
 `
 
+export const ENABLE_AUTO_MERGE_MUTATION = /* GraphQL */ `
+  mutation EnableAutoMerge($input: EnablePullRequestAutoMergeInput!) {
+    enablePullRequestAutoMerge(input: $input) {
+      pullRequest { id state }
+    }
+  }
+`
+
+export const DISABLE_AUTO_MERGE_MUTATION = /* GraphQL */ `
+  mutation DisableAutoMerge($input: DisablePullRequestAutoMergeInput!) {
+    disablePullRequestAutoMerge(input: $input) {
+      pullRequest { id }
+    }
+  }
+`
+
 export const READY_FOR_REVIEW_MUTATION = /* GraphQL */ `
   mutation ReadyForReview($input: MarkPullRequestReadyForReviewInput!) {
     markPullRequestReadyForReview(input: $input) {
@@ -416,5 +437,7 @@ export const ALL_DOCUMENTS: Record<string, string> = {
   unresolveThread: UNRESOLVE_THREAD_MUTATION,
   addIssueComment: ADD_ISSUE_COMMENT_MUTATION,
   merge: MERGE_MUTATION,
+  enableAutoMerge: ENABLE_AUTO_MERGE_MUTATION,
+  disableAutoMerge: DISABLE_AUTO_MERGE_MUTATION,
   readyForReview: READY_FOR_REVIEW_MUTATION,
 }

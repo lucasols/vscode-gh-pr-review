@@ -17,6 +17,8 @@ import {
   BRANCH_PRS_QUERY,
   DELETE_COMMENT_MUTATION,
   DELETE_REVIEW_MUTATION,
+  DISABLE_AUTO_MERGE_MUTATION,
+  ENABLE_AUTO_MERGE_MUTATION,
   MERGE_MUTATION,
   PR_COMMITS_QUERY,
   PR_DETAIL_QUERY,
@@ -489,6 +491,24 @@ export class GitHubApi {
     expectedHeadOid: string
   }): Promise<void> {
     await this.client.graphql(MERGE_MUTATION, { input }, anyMutationSchema)
+  }
+
+  /** GitHub merges the pull request on its own when its requirements are met */
+  async enableAutoMerge(input: {
+    pullRequestId: string
+    mergeMethod: MergeMethod
+    /** Fails when the pull request has other commits than these */
+    expectedHeadOid: string
+  }): Promise<void> {
+    await this.client.graphql(ENABLE_AUTO_MERGE_MUTATION, { input }, anyMutationSchema)
+  }
+
+  async disableAutoMerge(pullRequestId: string): Promise<void> {
+    await this.client.graphql(
+      DISABLE_AUTO_MERGE_MUTATION,
+      { input: { pullRequestId } },
+      anyMutationSchema,
+    )
   }
 
   async markReadyForReview(pullRequestId: string): Promise<void> {

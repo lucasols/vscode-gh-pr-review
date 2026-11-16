@@ -440,14 +440,7 @@ function renderMerge(state: OverviewState): void {
   const actions = h('div', { class: 'merge-actions' })
 
   if (state.isDraft) {
-    rows.push(
-      h(
-        'div',
-        { class: 'merge-row' },
-        checkIcon('NONE'),
-        h('span', {}, 'This pull request is still a draft'),
-      ),
-    )
+    row(checkIcon('NONE'), 'This pull request is still a draft')
     actions.append(
       actionButton(
         'readyForReview',
@@ -457,9 +450,29 @@ function renderMerge(state: OverviewState): void {
         { primary: true, disabled: !state.viewerCanUpdate },
       ),
     )
-  } else if (state.mergeMethods.length === 0) {
-    rows.push(h('div', { class: 'muted' }, 'This repository does not allow merging here.'))
-  } else {
+  }
+
+  const block = state.mergeBlock
+  if (block?.kind === 'permission') row(checkIcon('NONE'), block.reason)
+
+  const { autoMerge } = state
+  if (autoMerge) {
+    const by = autoMerge.enabledBy ? ` by ${autoMerge.enabledBy}` : ''
+    const verb = MERGE_LABELS[autoMerge.mergeMethod].toLowerCase()
+    row(
+      checkIcon('PENDING'),
+      `Auto-merge is enabled${by}. GitHub will ${verb} when the requirements are met`,
+    )
+  }
+
+  const showMerge = !state.isDraft
+  const showEnableAutoMerge = !autoMerge && state.canEnableAutoMerge
+
+  if (state.mergeMethods.length === 0) {
+    if (showMerge) {
+      rows.push(h('div', { class: 'muted' }, 'This repository does not allow merging here.'))
+    }
+  } else if (showMerge || showEnableAutoMerge) {
     const method =
       selectedMergeMethod && state.mergeMethods.includes(selectedMergeMethod) ?
         selectedMergeMethod
@@ -479,18 +492,45 @@ function renderMerge(state: OverviewState): void {
       selectedMergeMethod = state.mergeMethods.find((option) => option === select.value)
     })
 
+    const canMerge = !block || block.canBypass
+    actions.append(select)
+    if (showMerge) {
+      actions.append(
+        actionButton(
+          'merge',
+          block?.canBypass ? 'Bypass rules and merge' : 'Merge pull request',
+          'Merging…',
+          () => send({ type: 'merge', method: selectedMergeMethod ?? method }),
+          {
+            primary: !block,
+            disabled: !canMerge,
+            title: canMerge ? 'You will be asked to confirm' : block.reason,
+          },
+        ),
+      )
+    }
+    if (showEnableAutoMerge) {
+      actions.append(
+        actionButton(
+          'enableAutoMerge',
+          'Enable auto-merge',
+          'Enabling…',
+          () => send({ type: 'enableAutoMerge', method: selectedMergeMethod ?? method }),
+          {
+            // the main action while the merge itself has to wait
+            primary: showMerge && block !== undefined,
+            title:
+              'GitHub merges the pull request when its requirements are met. You will be asked to confirm',
+          },
+        ),
+      )
+    }
+  }
+
+  if (autoMerge && state.canDisableAutoMerge) {
     actions.append(
-      select,
-      actionButton(
-        'merge',
-        'Merge pull request',
-        'Merging…',
-        () => send({ type: 'merge', method: selectedMergeMethod ?? method }),
-        {
-          primary: true,
-          disabled: state.mergeable === 'CONFLICTING',
-          title: 'You will be asked to confirm',
-        },
+      actionButton('disableAutoMerge', 'Disable auto-merge', 'Disabling…', () =>
+        send({ type: 'disableAutoMerge' }),
       ),
     )
   }

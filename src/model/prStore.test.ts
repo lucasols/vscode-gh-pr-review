@@ -59,6 +59,11 @@ function detail(files: PrFile[], overrides: Partial<PrSummary> = {}): PrDetail {
       mergeStateStatus: 'CLEAN',
       viewerCanUpdate: true,
       viewerDidAuthor: true,
+      viewerCanMerge: true,
+      viewerCanMergeAsAdmin: false,
+      viewerCanEnableAutoMerge: false,
+      viewerCanDisableAutoMerge: false,
+      autoMerge: undefined,
       mergedBy: undefined,
       labels: [],
       assignees: [],
@@ -153,6 +158,8 @@ function createHarness() {
     submitReview: vi.fn<StoreApi['submitReview']>(() => Promise.resolve()),
     addReview: vi.fn<StoreApi['addReview']>(() => Promise.resolve('R2')),
     merge: vi.fn<StoreApi['merge']>(() => Promise.resolve()),
+    enableAutoMerge: vi.fn<StoreApi['enableAutoMerge']>(() => Promise.resolve()),
+    disableAutoMerge: vi.fn<StoreApi['disableAutoMerge']>(() => Promise.resolve()),
     fetchCommits: vi.fn<StoreApi['fetchCommits']>(unused),
     fetchCommitsTouchingPath: vi.fn<StoreApi['fetchCommitsTouchingPath']>(unused),
     deleteReview: vi.fn<StoreApi['deleteReview']>(unused),
@@ -511,5 +518,17 @@ describe('comments and reviews', () => {
       mergeMethod: 'SQUASH',
       expectedHeadOid: 'head-1',
     })
+  })
+
+  test('auto-merge is tied to the commit that was loaded', async () => {
+    await h.store.enableAutoMerge(KEY, 'SQUASH')
+    expect(h.api.enableAutoMerge).toHaveBeenCalledWith({
+      pullRequestId: 'PR_150',
+      mergeMethod: 'SQUASH',
+      expectedHeadOid: 'head-1',
+    })
+
+    await h.store.disableAutoMerge(KEY)
+    expect(h.api.disableAutoMerge).toHaveBeenCalledWith('PR_150')
   })
 })
