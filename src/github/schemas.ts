@@ -254,17 +254,6 @@ const timelineNodeSchema = z.object({
   mergeRefName: z.string().optional(),
   beforeCommit: z.object({ abbreviatedOid: z.string() }).nullable().optional(),
   afterCommit: z.object({ abbreviatedOid: z.string() }).nullable().optional(),
-  commit: z
-    .object({
-      abbreviatedOid: z.string(),
-      messageHeadline: z.string(),
-      committedDate: z.string(),
-      url: z.string(),
-      author: z
-        .object({ name: z.string().nullable(), user: actorSchema })
-        .nullable(),
-    })
-    .optional(),
 })
 
 type RawTimelineNode = z.infer<typeof timelineNodeSchema>
@@ -645,18 +634,6 @@ function toTimelineItem(node: RawTimelineNode, index: number): TimelineItem | un
         commentCount,
       }
     }
-    case 'PullRequestCommit':
-      if (!node.commit) return undefined
-      return {
-        type: 'commit',
-        id,
-        author: toActor(node.commit.author?.user),
-        authorName: node.commit.author?.name ?? undefined,
-        createdAt: node.commit.committedDate,
-        message: node.commit.messageHeadline,
-        abbreviatedOid: node.commit.abbreviatedOid,
-        url: node.commit.url,
-      }
     case 'HeadRefForcePushedEvent':
       return {
         type: 'event',

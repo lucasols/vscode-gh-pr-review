@@ -18,7 +18,8 @@ export default defineConfig([
     loader: { '.css': 'text' },
   },
   {
-    entry: { overview: 'src/webview/overview.ts' },
+    // `mermaid.js` is loaded by the page only when it has a diagram
+    entry: { overview: 'src/webview/overview.ts', mermaid: 'src/webview/mermaid.ts' },
     outDir: 'dist/webview',
     format: ['iife'],
     platform: 'browser',

@@ -26,7 +26,8 @@ Pull Requests extension that is built around two things:
   button on a folder opens only the files of that folder. With viewed files
   hidden, only the files left to review are included.
 - **Overview tab**: description, checks, reviewers, conversation, and the
-  buttons to merge, check out, comment, approve or request changes.
+  buttons to merge, check out, comment, approve or request changes. Mermaid
+  diagrams of the description and of the comments are rendered.
 - **Comments**: review threads are shown in the diffs and in the files of the
   workspace. Add single comments, start a review, reply, edit, delete and
   resolve.

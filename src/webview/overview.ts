@@ -6,6 +6,7 @@ import type {
   OverviewTimelineItem,
   ToWebviewMessage,
 } from '../shared/overviewProtocol'
+import { onDiagramThemeChange, renderDiagrams } from './diagrams'
 
 const MESSAGE_TYPES = new Set(['state', 'loading', 'busy', 'done'])
 
@@ -60,6 +61,7 @@ function h(tag: string, attrs: Attrs = {}, ...children: Child[]): HTMLElement {
 function markdown(html: string): HTMLElement {
   const element = h('div', { class: 'markdown' })
   element.innerHTML = html
+  renderDiagrams(element)
   return element
 }
 
@@ -291,17 +293,6 @@ function renderTimelineItem(item: OverviewTimelineItem): Child {
         item.bodyHtml ? h('div', { class: 'card-body' }, markdown(item.bodyHtml)) : undefined,
       )
     }
-
-    case 'commit':
-      return h(
-        'div',
-        { class: 'event' },
-        h('span', { class: 'muted' }, '●'),
-        avatar(item.author),
-        h('span', { class: 'message' }, item.message),
-        h('a', { class: 'oid', href: item.url }, item.abbreviatedOid),
-        timeAgo(item.createdAt),
-      )
 
     case 'event': {
       const text =
@@ -722,4 +713,5 @@ window.addEventListener('message', (event: MessageEvent<unknown>) => {
 })
 
 mount()
+onDiagramThemeChange(render)
 send({ type: 'ready' })

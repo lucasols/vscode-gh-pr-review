@@ -31,16 +31,6 @@ const timelineItemSchema = z.discriminatedUnion('type', [
     commentCount: z.number(),
   }),
   z.object({
-    type: z.literal('commit'),
-    id: z.string(),
-    author: actorSchema.optional(),
-    authorName: z.string().optional(),
-    createdAt: z.string(),
-    message: z.string(),
-    abbreviatedOid: z.string(),
-    url: z.string(),
-  }),
-  z.object({
     type: z.literal('event'),
     id: z.string(),
     author: actorSchema.optional(),

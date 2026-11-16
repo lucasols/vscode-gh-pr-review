@@ -127,16 +127,6 @@ export type TimelineItem =
       commentCount: number
     }
   | {
-      type: 'commit'
-      id: string
-      author: Actor | undefined
-      authorName: string | undefined
-      createdAt: string
-      message: string
-      abbreviatedOid: string
-      url: string
-    }
-  | {
       type: 'event'
       id: string
       author: Actor | undefined

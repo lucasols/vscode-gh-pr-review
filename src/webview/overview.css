@@ -294,6 +294,21 @@ textarea {
   border: 1px solid var(--border);
 }
 
+.markdown .diagram {
+  margin: 0 0 1em;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.markdown .diagram svg {
+  height: auto;
+}
+
+.markdown .diagram-error {
+  margin: -0.5em 0 1em;
+  color: var(--muted);
+}
+
 .markdown .task-list-item {
   list-style: none;
 }
@@ -309,14 +324,6 @@ textarea {
   gap: 6px;
   margin: 0 0 12px;
   padding-left: 14px;
-}
-
-.event .oid {
-  font-family: var(--vscode-editor-font-family);
-}
-
-.event .message {
-  overflow-wrap: anywhere;
 }
 
 .review-state.approved,

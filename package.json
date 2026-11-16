@@ -33,6 +33,7 @@
   ],
   "dependencies": {
     "diff": "^8.0.2",
+    "mermaid": "^12.3.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
@@ -322,39 +323,138 @@
     ],
     "menus": {
       "commandPalette": [
-        { "command": "ghPrReview.openPr", "when": "false" },
-        { "command": "ghPrReview.openFile", "when": "false" },
-        { "command": "ghPrReview.openFullDiff", "when": "false" },
-        { "command": "ghPrReview.openChangesSinceViewed", "when": "false" },
-        { "command": "ghPrReview.compareWithCommit", "when": "false" },
-        { "command": "ghPrReview.toggleDiffMode", "when": "false" },
-        { "command": "ghPrReview.openFolderChanges", "when": "false" },
-        { "command": "ghPrReview.openLocalFile", "when": "false" },
-        { "command": "ghPrReview.copyPath", "when": "false" },
-        { "command": "ghPrReview.copyLink", "when": "false" },
-        { "command": "ghPrReview.markViewed", "when": "false" },
-        { "command": "ghPrReview.unmarkViewed", "when": "false" },
-        { "command": "ghPrReview.markViewedAndNext", "when": "false" },
-        { "command": "ghPrReview.comment.addSingle", "when": "false" },
-        { "command": "ghPrReview.comment.startReview", "when": "false" },
-        { "command": "ghPrReview.comment.addToReview", "when": "false" },
-        { "command": "ghPrReview.comment.resolve", "when": "false" },
-        { "command": "ghPrReview.comment.unresolve", "when": "false" },
-        { "command": "ghPrReview.comment.edit", "when": "false" },
-        { "command": "ghPrReview.comment.delete", "when": "false" },
-        { "command": "ghPrReview.comment.save", "when": "false" },
-        { "command": "ghPrReview.comment.cancelEdit", "when": "false" },
-        { "command": "ghPrReview.viewAsTree", "when": "false" },
-        { "command": "ghPrReview.viewAsList", "when": "false" },
-        { "command": "ghPrReview.hideViewed", "when": "false" },
-        { "command": "ghPrReview.showViewed", "when": "false" },
-        { "command": "ghPrReview.openDescription", "when": "ghPrReview.hasFocusedPr" },
-        { "command": "ghPrReview.openOnGitHub", "when": "ghPrReview.hasFocusedPr" },
-        { "command": "ghPrReview.checkout", "when": "ghPrReview.hasFocusedPr" },
-        { "command": "ghPrReview.openNextUnviewed", "when": "ghPrReview.hasFocusedPr" },
-        { "command": "ghPrReview.openAllChanges", "when": "ghPrReview.hasFocusedPr" },
-        { "command": "ghPrReview.submitReview", "when": "ghPrReview.hasFocusedPr" },
-        { "command": "ghPrReview.discardReview", "when": "ghPrReview.hasPendingReview" }
+        {
+          "command": "ghPrReview.openPr",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.openFile",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.openFullDiff",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.openChangesSinceViewed",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.compareWithCommit",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.toggleDiffMode",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.openFolderChanges",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.openLocalFile",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.copyLink",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.markViewed",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.unmarkViewed",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.markViewedAndNext",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.addSingle",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.startReview",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.addToReview",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.resolve",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.unresolve",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.edit",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.delete",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.save",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.comment.cancelEdit",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.viewAsTree",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.viewAsList",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.hideViewed",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.showViewed",
+          "when": "false"
+        },
+        {
+          "command": "ghPrReview.openDescription",
+          "when": "ghPrReview.hasFocusedPr"
+        },
+        {
+          "command": "ghPrReview.openOnGitHub",
+          "when": "ghPrReview.hasFocusedPr"
+        },
+        {
+          "command": "ghPrReview.checkout",
+          "when": "ghPrReview.hasFocusedPr"
+        },
+        {
+          "command": "ghPrReview.openNextUnviewed",
+          "when": "ghPrReview.hasFocusedPr"
+        },
+        {
+          "command": "ghPrReview.openAllChanges",
+          "when": "ghPrReview.hasFocusedPr"
+        },
+        {
+          "command": "ghPrReview.submitReview",
+          "when": "ghPrReview.hasFocusedPr"
+        },
+        {
+          "command": "ghPrReview.discardReview",
+          "when": "ghPrReview.hasPendingReview"
+        }
       ],
       "view/title": [
         {
@@ -630,9 +730,15 @@
           "description": "The categories of the Pull Requests list. Each query uses the GitHub search syntax and is limited to the repository of the workspace.",
           "items": {
             "type": "object",
-            "required": ["label", "query"],
+            "required": [
+              "label",
+              "query"
+            ],
             "properties": {
-              "label": { "type": "string", "description": "The name of the category." },
+              "label": {
+                "type": "string",
+                "description": "The name of the category."
+              },
               "query": {
                 "type": "string",
                 "description": "A GitHub search query, e.g. `is:open review-requested:@me`."
@@ -640,9 +746,18 @@
             }
           },
           "default": [
-            { "label": "Waiting For My Review", "query": "is:open review-requested:@me" },
-            { "label": "Created By Me", "query": "is:open author:@me" },
-            { "label": "All Open", "query": "is:open" }
+            {
+              "label": "Waiting For My Review",
+              "query": "is:open review-requested:@me"
+            },
+            {
+              "label": "Created By Me",
+              "query": "is:open author:@me"
+            },
+            {
+              "label": "All Open",
+              "query": "is:open"
+            }
           ]
         },
         "ghPrReview.refreshIntervalSeconds": {
@@ -653,7 +768,10 @@
         },
         "ghPrReview.fileLayout": {
           "type": "string",
-          "enum": ["tree", "list"],
+          "enum": [
+            "tree",
+            "list"
+          ],
           "default": "tree",
           "description": "How the changed files of a pull request are shown."
         },
@@ -667,7 +785,11 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "enum": ["lockfile", "renameOnly", "importsOnly"],
+            "enum": [
+              "lockfile",
+              "renameOnly",
+              "importsOnly"
+            ],
             "enumDescriptions": [
               "Lockfiles of package managers, e.g. pnpm-lock.yaml.",
               "Files that were renamed or moved without a change in their content.",
@@ -679,7 +801,10 @@
         },
         "ghPrReview.defaultDiff": {
           "type": "string",
-          "enum": ["sinceViewed", "full"],
+          "enum": [
+            "sinceViewed",
+            "full"
+          ],
           "enumDescriptions": [
             "When a file changed after you marked it as viewed, open only the changes made since then.",
             "Always open the full diff of the pull request."
@@ -694,7 +819,11 @@
         },
         "ghPrReview.authSource": {
           "type": "string",
-          "enum": ["auto", "vscode", "gh-cli"],
+          "enum": [
+            "auto",
+            "vscode",
+            "gh-cli"
+          ],
           "enumDescriptions": [
             "Use the GitHub account of VS Code when it is already authorized, otherwise the token of the GitHub CLI.",
             "Only use the GitHub account of VS Code.",

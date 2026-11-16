@@ -167,7 +167,6 @@ export const PR_DETAIL_QUERY = /* GraphQL */ `
           itemTypes: [
             ISSUE_COMMENT
             PULL_REQUEST_REVIEW
-            PULL_REQUEST_COMMIT
             HEAD_REF_FORCE_PUSHED_EVENT
             MERGED_EVENT
             CLOSED_EVENT
@@ -192,16 +191,6 @@ export const PR_DETAIL_QUERY = /* GraphQL */ `
               url
               author { ${ACTOR} }
               comments { totalCount }
-            }
-            ... on PullRequestCommit {
-              id
-              commit {
-                abbreviatedOid
-                messageHeadline
-                committedDate
-                url
-                author { name user { ${ACTOR} } }
-              }
             }
             ... on HeadRefForcePushedEvent {
               id
