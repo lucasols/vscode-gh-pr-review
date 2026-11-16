@@ -16,6 +16,7 @@ import {
   openStackedChanges,
   type DiffMode,
 } from './views/diffOpener'
+import { warnAboutLocalChanges } from './views/localChanges'
 import type { OverviewPanels } from './views/overviewPanel'
 import { isListNode } from './views/prListView'
 
@@ -101,6 +102,7 @@ export function registerCommands(
       return undefined
     }
 
+    if (viewed) void warnAboutLocalChanges(services, target.prKey, target.paths)
     await store.setViewed(target.prKey, target.paths, viewed)
     return target
   }

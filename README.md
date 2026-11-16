@@ -51,6 +51,10 @@ The viewed versions are stored on this machine. A file that was marked as
 viewed on github.com gets its version the next time the extension sees it as
 viewed, so keep VS Code open on the pull request, or mark files as viewed here.
 
+The viewed version is always the one that GitHub has. When a file that is open
+in the workspace differs from it, for example because of edits that are not
+pushed, marking the file as viewed shows a warning.
+
 ### Changes that are not relevant
 
 Some changes are noise in a review. They get an indicator in the tree:

@@ -18,6 +18,7 @@ import type { Services } from '../services'
 import { debounce } from '../util/async'
 import { toTreeFileUri } from './decorations'
 import { getLocalFileUri } from './diffOpener'
+import { warnAboutLocalChanges } from './localChanges'
 
 export type ChangesNode =
   | { kind: 'description'; prKey: string }
@@ -130,6 +131,9 @@ export class ChangesView implements vscode.TreeDataProvider<ChangesNode>, vscode
       group.paths.push(...collectNodePaths(node))
     }
     for (const group of groups.values()) {
+      if (group.viewed) {
+        void warnAboutLocalChanges(this.services, group.prKey, group.paths)
+      }
       void this.services.store.setViewed(group.prKey, group.paths, group.viewed)
     }
   }
