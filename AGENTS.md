@@ -11,7 +11,9 @@ VS Code extension to review GitHub pull requests. See `README.md` for what it do
   `package.json`, `src/main.ts` or `src/commands.ts`.
 - `pnpm validate-graphql`: validates `src/github/queries.ts` against the public
   schema of GitHub. Run it after changing a query.
-- `pnpm build-and-install`: package and install the extension.
+- `pnpm build-and-install`: package and install the extension. Always run it
+  when a change to the extension is finished, without being asked, so the user
+  can try the change right away.
 
 ## Architecture
 
