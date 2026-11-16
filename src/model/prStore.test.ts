@@ -336,6 +336,84 @@ describe('focus', () => {
     expect(h.store.focusedKey).toBe(KEY)
   })
 
+  test('switching to a branch without a pull request clears the focus of the branch that was left', async () => {
+    h.store.setRepos([repo])
+    await h.store.refreshAll()
+    expect(h.store.focusedKey).toBe(KEY)
+
+    h.remote.branchPrs = []
+    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
+    await h.store.refreshAll()
+
+    expect(h.store.getCheckedOut('/work/app')).toBeUndefined()
+    expect(h.store.focusedKey).toBeUndefined()
+    expect(h.getPersistedFocus()).toBeUndefined()
+  })
+
+  test('switching to a branch without a pull request keeps the pull request that the user picked', async () => {
+    h.store.setRepos([repo])
+    await h.store.refreshAll()
+    h.store.focus('acme/app#7')
+
+    h.remote.branchPrs = []
+    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
+    await h.store.refreshAll()
+
+    expect(h.store.focusedKey).toBe('acme/app#7')
+  })
+
+  test('a detached HEAD keeps the focus, because a rebase comes back to the branch', async () => {
+    h.store.setRepos([repo])
+    await h.store.refreshAll()
+
+    h.remote.branchPrs = []
+    h.store.setRepos([{ ...repo, branch: undefined, headSha: 'rebase-1' }])
+    await h.store.refreshAll()
+
+    expect(h.store.focusedKey).toBe(KEY)
+  })
+
+  test('the focus stays when the lists fail to load after a branch switch, and follows the branch on the next load', async () => {
+    h.store.setRepos([repo])
+    await h.store.refreshAll()
+
+    h.remote.branchPrs = []
+    h.api.fetchLists.mockRejectedValueOnce(new Error('offline'))
+    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
+    await h.store.refreshLists()
+    expect(h.store.focusedKey).toBe(KEY)
+
+    await h.store.refreshLists()
+    expect(h.store.focusedKey).toBeUndefined()
+  })
+
+  test('a branch switch while the lists load focuses the pull request of the new branch', async () => {
+    h.store.setRepos([{ ...repo, branch: 'main', headSha: 'main-1' }])
+    h.remote.branchPrs = []
+    await h.store.refreshAll()
+    h.store.focus('acme/app#7')
+
+    const lists = await h.api.fetchLists(repo.github, [])
+    let release: () => void = () => undefined
+    h.api.fetchLists.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(lists)
+        }),
+    )
+    const outdated = h.store.refreshLists()
+
+    h.remote.branchPrs = [summary()]
+    h.store.setRepos([repo])
+    const latest = h.store.refreshLists()
+    release()
+    await outdated
+    expect(h.store.getCheckedOut('/work/app')).toBeUndefined()
+    await latest
+
+    expect(h.store.focusedKey).toBe(KEY)
+  })
+
   test('a refresh without a branch change keeps the pull request that the user picked', async () => {
     h.store.setRepos([repo])
     await h.store.refreshAll()

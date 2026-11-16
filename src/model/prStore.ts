@@ -361,6 +361,10 @@ export class PrStore {
     if (repos.length === 0) return
     const queries = this.deps.getQueries()
     const outcome = { authFailed: false, anySucceeded: false }
+    /** The pull request that each repository had checked out before this load */
+    const left = new Map<string, PrSummary | undefined>()
+    /** The repositories whose branch is still the one that was loaded */
+    const current = new Set<string>()
 
     await Promise.all(
       repos.map(async (repo) => {
@@ -380,6 +384,13 @@ export class PrStore {
           outcome.anySucceeded = true
           this.viewerLogin = lists.viewer
           this.lists.set(repo.rootPath, { categories: lists.categories, error: undefined })
+
+          // the branch can change while the lists load. Then the pull request
+          // that was found is the one of the branch that was left
+          const latest = this.repos.find((item) => item.rootPath === repo.rootPath)
+          if (latest?.branch !== repo.branch) return
+          current.add(repo.rootPath)
+          left.set(repo.rootPath, this.checkedOut.get(repo.rootPath))
           if (checkedOut) this.checkedOut.set(repo.rootPath, checkedOut)
           else this.checkedOut.delete(repo.rootPath)
         } catch (error) {
@@ -412,12 +423,29 @@ export class PrStore {
       this.listsEmitter.fire()
     }
 
+    // the focus follows the branch
     for (const rootPath of [...this.pendingBranchFocus]) {
-      const lists = this.lists.get(rootPath)
-      if (lists?.error !== undefined) continue
+      if (!this.repos.some((repo) => repo.rootPath === rootPath)) {
+        this.pendingBranchFocus.delete(rootPath)
+        continue
+      }
+      // a failed or outdated load says nothing about the new branch
+      if (!current.has(rootPath)) continue
       this.pendingBranchFocus.delete(rootPath)
+
       const pr = this.checkedOut.get(rootPath)
-      if (pr) this.focus(summaryKey(pr))
+      if (pr) {
+        this.focus(summaryKey(pr))
+        continue
+      }
+      // the new branch has no pull request. The pull request of the branch
+      // that was left loses the focus, one that the user picked keeps it. A
+      // detached HEAD is usually a rebase, which comes back to the branch.
+      const previous = left.get(rootPath)
+      const branch = this.repos.find((repo) => repo.rootPath === rootPath)?.branch
+      if (previous && branch !== undefined && this.focused === summaryKey(previous)) {
+        this.focus(undefined)
+      }
     }
 
     if (!this.focused) {
