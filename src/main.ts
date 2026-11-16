@@ -47,9 +47,12 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   const auth = new Auth()
   const api = new GitHubApi(new GitHubClient(auth, logWarn))
 
+  const baselineStore = new BaselineStore(context.globalState)
+  baselineStore.prune()
+
   const store = new PrStore({
     api,
-    baselines: new BaselineStore(context.globalState),
+    baselines: baselineStore,
     getQueries: () => config.queries(),
     notify: (level, message) => {
       if (level === 'error') void vscode.window.showErrorMessage(message)
