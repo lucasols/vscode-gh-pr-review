@@ -1,4 +1,10 @@
-import type { LabelChange, Reviewer, ReviewerChange } from '../model/types'
+import { config } from '../config'
+import {
+  parsePrKey,
+  type LabelChange,
+  type Reviewer,
+  type ReviewerChange,
+} from '../model/types'
 import type { Services } from '../services'
 import type { OverviewEditOption } from '../shared/overviewProtocol'
 
@@ -76,14 +82,17 @@ function reviewerKey(reviewer: { kind: Reviewer['kind']; slug: string }): string
 
 /**
  * Who can review the pull request. The checked ones are who has a request for
- * a review.
+ * a review. When the user picked who is offered in the repository, the others
+ * are left out.
  */
 export async function loadReviewerEdit(
   services: Services,
   prKey: string,
 ): Promise<EditSession> {
   const { store } = services
-  const available = await store.fetchReviewerOptions(prKey)
+  const repo = parsePrKey(prKey)
+  const available = repo ? await store.fetchReviewerOptions(repo) : []
+  const offered = repo ? config.reviewers(repo) : undefined
   // read after the options, so that the checked reviewers are the latest known
   const detail = store.getDetail(prKey)
   const author = detail?.summary.author?.login.toLowerCase()
@@ -100,6 +109,9 @@ export async function loadReviewerEdit(
     if (option.kind === 'user' && option.slug.toLowerCase() === author) continue
     const key = reviewerKey(option)
     const reviewer = reviewers.get(key)
+    // a reviewer of the pull request stays, so that the request can be removed
+    // or made again
+    if (offered && !offered.has(option.slug.toLowerCase()) && !reviewer) continue
     refs.set(key, { kind: option.kind, slug: option.slug, id: option.id })
     ;(reviewer ? reviewed : others).push({
       key,

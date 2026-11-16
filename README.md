@@ -31,7 +31,9 @@ Pull Requests extension that is built around two things:
 - **Overview tab**: description, checks, reviewers, conversation, and the
   buttons to merge, check out, comment, approve or request changes. The
   reviewers and the labels can be edited in a dropdown of the page when you
-  have the permission: a click outside of it saves, Esc cancels. The merge
+  have the permission: a click outside of it saves, Esc cancels. The command
+  **Configure Repository Reviewers…** picks who is offered as a reviewer in a
+  repository, and stores them in `ghPrReview.reviewers`. The merge
   button is disabled while GitHub would reject the merge, and auto-merge can
   be enabled or disabled when the repository allows it. Mermaid
   diagrams of the description and of the comments are rendered.
@@ -92,6 +94,7 @@ unmark stays unmarked.
 | `ghPrReview.defaultDiff`                        | `sinceViewed`| What a click on a file that changed since viewed opens |
 | `ghPrReview.useLocalFiles`                      | `true`       | Use the files of the workspace in the diffs      |
 | `ghPrReview.authSource`                         | `auto`       | `vscode` account, `gh-cli`, or `auto` for both   |
+| `ghPrReview.reviewers`                          | `{}`         | Who is offered as a reviewer, by repository (user setting) |
 
 ## Authentication
 

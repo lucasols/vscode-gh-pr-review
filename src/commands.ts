@@ -9,6 +9,7 @@ import type { Services } from './services'
 import { errorMessage } from './util/async'
 import { repoKey } from './util/remoteUrl'
 import { collectNodePaths, isChangesNode, type ChangesView } from './views/changesView'
+import { configureRepoReviewers } from './views/configureReviewers'
 import {
   getLocalFileUri,
   openDiffSinceCommit,
@@ -244,6 +245,8 @@ export function registerCommands(
     },
 
     'ghPrReview.openPrByNumber': openPrByNumber,
+
+    'ghPrReview.configureReviewers': () => configureRepoReviewers(services),
 
     'ghPrReview.openDescription': (arg) => {
       const prKey = resolvePrKey(arg)

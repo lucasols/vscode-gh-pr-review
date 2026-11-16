@@ -140,6 +140,11 @@
         "category": "GH PR Review"
       },
       {
+        "command": "ghPrReview.configureReviewers",
+        "title": "Configure Repository Reviewers…",
+        "category": "GH PR Review"
+      },
+      {
         "command": "ghPrReview.openDescription",
         "title": "Open Pull Request Description",
         "category": "GH PR Review",
@@ -472,6 +477,10 @@
         },
         {
           "command": "ghPrReview.openPrByNumber",
+          "when": "view == ghPrReview.prs"
+        },
+        {
+          "command": "ghPrReview.configureReviewers",
           "when": "view == ghPrReview.prs"
         },
         {
@@ -834,6 +843,19 @@
           ],
           "default": "auto",
           "description": "Where the GitHub credentials come from."
+        },
+        "ghPrReview.reviewers": {
+          "type": "object",
+          "scope": "application",
+          "additionalProperties": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "default": {},
+          "markdownDescription": "Who is offered in the dropdown of the reviewers of a pull request, by repository. The keys are `owner/repository` and the values are logins of users or slugs of teams, e.g. `{ \"acme/app\": [\"ana\", \"bruno\"] }`. A repository that is not listed offers everyone who can review. Who already is a reviewer of a pull request is always shown in it. The command **GH PR Review: Configure Repository Reviewers…** edits this setting."
         }
       }
     }

@@ -796,10 +796,9 @@ export class PrStore {
     return ref ? this.deps.api.fetchLabels(ref) : []
   }
 
-  /** The users and the teams that can review a pull request */
-  async fetchReviewerOptions(key: string): Promise<ReviewerOption[]> {
-    const ref = parsePrKey(key)
-    return ref ? this.deps.api.fetchReviewerOptions(ref) : []
+  /** The users and the teams that can review the pull requests of a repository */
+  fetchReviewerOptions(repo: RepoRef): Promise<ReviewerOption[]> {
+    return this.deps.api.fetchReviewerOptions(repo)
   }
 
   async updateLabels(key: string, change: LabelChange): Promise<void> {
