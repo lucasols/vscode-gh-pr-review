@@ -1,6 +1,8 @@
 // only types are imported, so that the schema library stays out of the page
 import type {
   FromWebviewMessage,
+  OverviewEditField,
+  OverviewEditOption,
   OverviewState,
   OverviewThread,
   OverviewTimelineItem,
@@ -8,7 +10,7 @@ import type {
 } from '../shared/overviewProtocol'
 import { onDiagramThemeChange, renderDiagrams } from './diagrams'
 
-const MESSAGE_TYPES = new Set(['state', 'loading', 'busy', 'done'])
+const MESSAGE_TYPES = new Set(['state', 'loading', 'busy', 'done', 'editOptions'])
 
 /**
  * The messages come from the extension, which builds them with the types of
@@ -157,6 +159,211 @@ function actionButton(
     busyAction === action ? busyLabel : label,
   )
 }
+
+const EDIT_FIELDS = {
+  reviewers: {
+    action: 'editReviewers',
+    title: 'Request reviews',
+    placeholder: 'Filter people and teams',
+    empty: 'No one found',
+    failure: 'Could not load the reviewers',
+  },
+  labels: {
+    action: 'editLabels',
+    title: 'Apply labels',
+    placeholder: 'Filter labels',
+    empty: 'No label found',
+    failure: 'Could not load the labels',
+  },
+} as const
+
+/** The dropdown of a section of the side bar, while it is open */
+let editor:
+  | {
+      field: OverviewEditField
+      /** Undefined while the extension loads them */
+      options: OverviewEditOption[] | undefined
+      error: string | undefined
+      checked: Set<string>
+      /** The position, in the options that match the filter, that the keyboard is on */
+      active: number
+    }
+  | undefined
+
+// the dropdown is outside of the side bar, which is replaced on every update
+const dropdownTitle = h('div', { class: 'dropdown-title' })
+const dropdownFilter = document.createElement('input')
+dropdownFilter.type = 'text'
+dropdownFilter.spellcheck = false
+const dropdownList = h('div', { class: 'dropdown-list', role: 'listbox' })
+const dropdown = h(
+  'div',
+  { class: 'dropdown', hidden: true },
+  dropdownTitle,
+  dropdownFilter,
+  dropdownList,
+  h(
+    'div',
+    { class: 'dropdown-footer' },
+    h('span', { class: 'muted' }, 'Click outside to apply, Esc to cancel'),
+    h('button', { class: 'primary', onclick: () => closeEditor(true) }, 'Apply'),
+  ),
+)
+
+function editButton(field: OverviewEditField): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-edit="${field}"]`)
+}
+
+function matchingOptions(): OverviewEditOption[] {
+  const filter = dropdownFilter.value.trim().toLowerCase()
+  const options = editor?.options ?? []
+  if (!filter) return options
+  return options.filter(
+    (option) =>
+      option.label.toLowerCase().includes(filter) ||
+      option.description?.toLowerCase().includes(filter),
+  )
+}
+
+function optionIcon(field: OverviewEditField, option: OverviewEditOption): HTMLElement {
+  if (field === 'labels') {
+    const color = /^[0-9a-f]{6}$/i.test(option.color ?? '') ? option.color : undefined
+    return h('span', { class: 'dot', style: color ? `background: #${color}` : undefined })
+  }
+  return option.avatarUrl ?
+      h('img', { class: 'avatar', src: option.avatarUrl, alt: '' })
+    : h('span', { class: 'avatar placeholder' })
+}
+
+function renderDropdownList(): void {
+  if (!editor) return
+  const { field, checked } = editor
+  const texts = EDIT_FIELDS[field]
+  const note = (text: string) => h('div', { class: 'dropdown-note' }, text)
+
+  if (editor.error !== undefined) {
+    dropdownList.replaceChildren(note(`${texts.failure}: ${editor.error}`))
+    return
+  }
+  if (!editor.options) {
+    dropdownList.replaceChildren(note('Loading…'))
+    return
+  }
+
+  const options = matchingOptions()
+  editor.active = Math.max(0, Math.min(editor.active, options.length - 1))
+  if (options.length === 0) {
+    dropdownList.replaceChildren(note(texts.empty))
+    return
+  }
+
+  const { active } = editor
+  dropdownList.replaceChildren(
+    ...options.map((option, index) =>
+      h(
+        'div',
+        {
+          class: index === active ? 'option active' : 'option',
+          role: 'option',
+          'aria-selected': String(checked.has(option.key)),
+          title: option.description,
+          onclick: () => {
+            if (!editor) return
+            editor.active = index
+            toggleOption(option.key)
+          },
+        },
+        h('span', { class: 'check' }, checked.has(option.key) ? '✓' : ''),
+        optionIcon(field, option),
+        h(
+          'span',
+          { class: 'option-text' },
+          h('span', { class: 'option-label' }, option.label),
+          option.description !== undefined &&
+            h('span', { class: 'option-description muted' }, option.description),
+        ),
+      ),
+    ),
+  )
+  dropdownList.querySelector('.active')?.scrollIntoView({ block: 'nearest' })
+}
+
+function toggleOption(key: string): void {
+  if (!editor) return
+  if (!editor.checked.delete(key)) editor.checked.add(key)
+  renderDropdownList()
+  dropdownFilter.focus()
+}
+
+/** Under the button of its section, aligned to the right side of it */
+function positionDropdown(): void {
+  if (!editor) return
+  const button = editButton(editor.field)
+  if (!button) {
+    closeEditor(false)
+    return
+  }
+  const rect = button.getBoundingClientRect()
+  const left = rect.right + window.scrollX - dropdown.offsetWidth
+  dropdown.style.top = `${rect.bottom + window.scrollY + 6}px`
+  dropdown.style.left = `${Math.max(8, left)}px`
+}
+
+function openEditor(field: OverviewEditField): void {
+  editor = { field, options: undefined, error: undefined, checked: new Set(), active: 0 }
+  dropdownTitle.textContent = EDIT_FIELDS[field].title
+  dropdownFilter.value = ''
+  dropdownFilter.placeholder = EDIT_FIELDS[field].placeholder
+  dropdown.hidden = false
+  renderDropdownList()
+  positionDropdown()
+  dropdownFilter.focus()
+  send({ type: 'loadEditOptions', field })
+}
+
+/** Closing saves what is checked, like on GitHub, unless it is cancelled */
+function closeEditor(apply: boolean): void {
+  if (!editor) return
+  const { field, options, checked } = editor
+  editor = undefined
+  dropdown.hidden = true
+  editButton(field)?.focus()
+  if (apply && options) send({ type: 'applyEdit', field, checked: [...checked] })
+}
+
+dropdownFilter.addEventListener('input', () => {
+  if (!editor) return
+  editor.active = 0
+  renderDropdownList()
+})
+
+dropdownFilter.addEventListener('keydown', (event) => {
+  if (!editor) return
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    editor.active += event.key === 'ArrowDown' ? 1 : -1
+    renderDropdownList()
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    const option = matchingOptions()[editor.active]
+    if (option) toggleOption(option.key)
+  }
+})
+
+dropdown.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  closeEditor(false)
+})
+
+document.addEventListener('mousedown', (event) => {
+  if (!editor || !(event.target instanceof Element)) return
+  // its own button closes it with the click that follows
+  if (dropdown.contains(event.target) || event.target.closest('[data-edit]')) return
+  closeEditor(true)
+})
+
+window.addEventListener('resize', positionDropdown)
 
 function renderHeader(state: OverviewState): void {
   const badge =
@@ -605,10 +812,10 @@ function renderForm(state: OverviewState): void {
 function renderSidebar(state: OverviewState): void {
   const section = (title: string, ...children: Child[]) =>
     h('section', {}, h('h3', {}, title), ...children)
-  /** A section whose content is edited in a picker of VS Code */
+  /** A section whose content is edited in a dropdown under its button */
   const editableSection = (
     title: string,
-    edit: { type: 'editReviewers' | 'editLabels'; allowed: boolean; title: string },
+    edit: { field: OverviewEditField; allowed: boolean; title: string },
     ...children: Child[]
   ) =>
     h(
@@ -623,11 +830,16 @@ function renderSidebar(state: OverviewState): void {
             'button',
             {
               class: 'link',
+              'data-edit': edit.field,
               disabled: busyAction !== undefined,
               title: edit.title,
-              onclick: () => send({ type: edit.type }),
+              onclick: () => {
+                const isOpen = editor?.field === edit.field
+                closeEditor(true)
+                if (!isOpen) openEditor(edit.field)
+              },
             },
-            busyAction === edit.type ? 'Saving…' : 'Edit',
+            busyAction === EDIT_FIELDS[edit.field].action ? 'Saving…' : 'Edit',
           ),
       ),
       ...children,
@@ -666,7 +878,7 @@ function renderSidebar(state: OverviewState): void {
     editableSection(
       'Reviewers',
       {
-        type: 'editReviewers',
+        field: 'reviewers',
         allowed: state.canEditReviewers,
         title: 'Request or remove reviewers',
       },
@@ -690,7 +902,7 @@ function renderSidebar(state: OverviewState): void {
     ),
     editableSection(
       'Labels',
-      { type: 'editLabels', allowed: state.canEditLabels, title: 'Add or remove labels' },
+      { field: 'labels', allowed: state.canEditLabels, title: 'Add or remove labels' },
       state.labels.length === 0 ? none('None yet') : undefined,
       ...state.labels.map((label) =>
         h(
@@ -730,6 +942,7 @@ function render(): void {
   renderMerge(current)
   renderForm(current)
   renderSidebar(current)
+  positionDropdown()
 }
 
 function mount(): void {
@@ -756,7 +969,7 @@ function mount(): void {
       elements.sidebar,
     ),
   )
-  document.body.append(elements.status, elements.page)
+  document.body.append(elements.status, elements.page, dropdown)
 }
 
 window.addEventListener('message', (event: MessageEvent<unknown>) => {
@@ -789,6 +1002,15 @@ window.addEventListener('message', (event: MessageEvent<unknown>) => {
       if (message.action === 'comment' || message.action.startsWith('review')) {
         commentBox.value = ''
       }
+      return
+    case 'editOptions':
+      if (editor?.field !== message.field || editor.options) return
+      editor.error = message.error
+      editor.options = message.error === undefined ? (message.options ?? []) : undefined
+      editor.checked = new Set(
+        (editor.options ?? []).filter((option) => option.checked).map((option) => option.key),
+      )
+      renderDropdownList()
       return
   }
 })

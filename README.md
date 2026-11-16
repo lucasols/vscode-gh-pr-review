@@ -30,7 +30,8 @@ Pull Requests extension that is built around two things:
   hidden, only the files left to review are included.
 - **Overview tab**: description, checks, reviewers, conversation, and the
   buttons to merge, check out, comment, approve or request changes. The
-  reviewers and the labels can be edited when you have the permission. The merge
+  reviewers and the labels can be edited in a dropdown of the page when you
+  have the permission: a click outside of it saves, Esc cancels. The merge
   button is disabled while GitHub would reject the merge, and auto-merge can
   be enabled or disabled when the repository allows it. Mermaid
   diagrams of the description and of the comments are rendered.

@@ -8,12 +8,13 @@ import {
   fromWebviewMessageSchema,
   overviewPersistedSchema,
   type FromWebviewMessage,
+  type OverviewEditField,
   type ToWebviewMessage,
 } from '../shared/overviewProtocol'
 import { errorMessage } from '../util/async'
 import css from '../webview/overview.css'
+import { loadLabelEdit, loadReviewerEdit, type EditSession } from './editOptions'
 import { buildOverviewState } from './overviewState'
-import { pickLabels, pickReviewers } from './pickers'
 
 const VIEW_TYPE = 'ghPrReview.overview'
 
@@ -29,7 +30,33 @@ export type OverviewActions = {
   openFile: (prKey: string, path: string) => Promise<void>
 }
 
-type OpenPanel = { panel: vscode.WebviewPanel; watch: Disposable; ready: boolean }
+type OpenPanel = {
+  panel: vscode.WebviewPanel
+  watch: Disposable
+  ready: boolean
+  /** The dropdown that is open in the page, with what its options stand for */
+  edit: { field: OverviewEditField; session: EditSession | undefined } | undefined
+}
+
+const EDITS: Record<
+  OverviewEditField,
+  {
+    action: string
+    failure: string
+    load: (services: Services, prKey: string) => Promise<EditSession>
+  }
+> = {
+  labels: {
+    action: 'editLabels',
+    failure: 'Could not update the labels',
+    load: loadLabelEdit,
+  },
+  reviewers: {
+    action: 'editReviewers',
+    failure: 'Could not update the reviewers',
+    load: loadReviewerEdit,
+  },
+}
 
 function panelTitle(prKey: string, detail: PrDetail | undefined, title?: string): string {
   const number = prKey.slice(prKey.lastIndexOf('#') + 1)
@@ -99,6 +126,7 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
       panel,
       watch: this.services.store.watch(prKey),
       ready: false,
+      edit: undefined,
     }
     this.panels.set(prKey, open)
 
@@ -225,21 +253,32 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
         )
         return
 
-      case 'editLabels': {
-        const change = await pickLabels(this.services, prKey)
-        if (!change) return
-        await this.run(open, 'editLabels', 'Could not update the labels', () =>
-          store.updateLabels(prKey, change),
-        )
+      case 'loadEditOptions': {
+        const { field } = message
+        // another dropdown can open before the options of this one arrive
+        const edit: OpenPanel['edit'] = { field, session: undefined }
+        open.edit = edit
+        try {
+          const session = await EDITS[field].load(this.services, prKey)
+          if (open.edit !== edit) return
+          edit.session = session
+          this.send(open, { type: 'editOptions', field, options: session.options })
+        } catch (error) {
+          if (open.edit !== edit) return
+          open.edit = undefined
+          this.send(open, { type: 'editOptions', field, error: errorMessage(error) })
+        }
         return
       }
 
-      case 'editReviewers': {
-        const change = await pickReviewers(this.services, prKey)
-        if (!change) return
-        await this.run(open, 'editReviewers', 'Could not update the reviewers', () =>
-          store.updateReviewers(prKey, change),
-        )
+      case 'applyEdit': {
+        const edit = open.edit
+        if (edit?.field !== message.field) return
+        open.edit = undefined
+        const save = edit.session?.save(new Set(message.checked))
+        if (!save) return
+        const { action, failure } = EDITS[message.field]
+        await this.run(open, action, failure, save)
         return
       }
 

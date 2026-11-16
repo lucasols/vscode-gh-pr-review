@@ -136,6 +136,23 @@ export type OverviewState = z.infer<typeof overviewStateSchema>
 export type OverviewTimelineItem = z.infer<typeof timelineItemSchema>
 export type OverviewThread = z.infer<typeof threadSchema>
 
+/** The sections of the side bar that are edited in a dropdown of the page */
+const editFieldSchema = z.enum(['reviewers', 'labels'])
+
+const editOptionSchema = z.object({
+  /** What the page sends back for an option that is checked */
+  key: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  /** The color of a label, as six hex digits */
+  color: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  checked: z.boolean(),
+})
+
+export type OverviewEditField = z.infer<typeof editFieldSchema>
+export type OverviewEditOption = z.infer<typeof editOptionSchema>
+
 export const toWebviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('state'), state: overviewStateSchema }),
   z.object({
@@ -147,6 +164,13 @@ export const toWebviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('busy'), action: z.string().optional() }),
   /** The action finished, so the text that was sent can be cleared */
   z.object({ type: z.literal('done'), action: z.string() }),
+  /** The answer to `loadEditOptions`: the options, or why they could not be loaded */
+  z.object({
+    type: z.literal('editOptions'),
+    field: editFieldSchema,
+    options: z.array(editOptionSchema).optional(),
+    error: z.string().optional(),
+  }),
 ])
 
 export type ToWebviewMessage = z.infer<typeof toWebviewMessageSchema>
@@ -162,8 +186,14 @@ export const fromWebviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('enableAutoMerge'), method: mergeMethodSchema }),
   z.object({ type: z.literal('disableAutoMerge') }),
   z.object({ type: z.literal('readyForReview') }),
-  z.object({ type: z.literal('editReviewers') }),
-  z.object({ type: z.literal('editLabels') }),
+  /** The dropdown of a section opened and needs its options */
+  z.object({ type: z.literal('loadEditOptions'), field: editFieldSchema }),
+  /** The dropdown closed with these options checked */
+  z.object({
+    type: z.literal('applyEdit'),
+    field: editFieldSchema,
+    checked: z.array(z.string()),
+  }),
   z.object({ type: z.literal('comment'), body: z.string() }),
   z.object({ type: z.literal('review'), event: reviewEventSchema, body: z.string() }),
   z.object({
