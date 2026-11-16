@@ -21,6 +21,10 @@ Pull Requests extension that is built around two things:
 - **Diffs**: against the merge base, like on GitHub. When the pull request is
   checked out, the right side is the file of the workspace, so it can be
   edited and has full language support.
+- **All changes stacked**: the button in the title of the Changes view opens
+  the diffs of all files in one editor, in the order of the view. The same
+  button on a folder opens only the files of that folder. With viewed files
+  hidden, only the files left to review are included.
 - **Overview tab**: description, checks, reviewers, conversation, and the
   buttons to merge, check out, comment, approve or request changes.
 - **Comments**: review threads are shown in the diffs and in the files of the

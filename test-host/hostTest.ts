@@ -102,7 +102,23 @@ export async function run(): Promise<void> {
   )
   await vscode.commands.executeCommand('ghPrReview.showViewed')
   await vscode.commands.executeCommand('ghPrReview.openNextUnviewed')
+  await vscode.commands.executeCommand('ghPrReview.openAllChanges')
   await vscode.commands.executeCommand('ghPrReview.markViewed')
+
+  // the stacked editor that the extension uses takes documents of the pull request
+  // (VS Code appends the number of files to the title, the extension relies on it)
+  await vscode.commands.executeCommand('vscode.changes', 'All Changes in #1', [
+    [emptyUri, emptyUri, emptyUri],
+  ])
+  const tabLabels = () =>
+    vscode.window.tabGroups.all.flatMap((group) => group.tabs.map((tab) => tab.label))
+  await waitFor('the stacked changes tab', () =>
+    tabLabels().includes('All Changes in #1 (1 file)'),
+  ).catch(
+    () => {
+      throw new Error(`No stacked changes tab, the tabs are: ${JSON.stringify(tabLabels())}`)
+    },
+  )
   await vscode.commands.executeCommand('ghPrReview.openDescription')
 
   // the overview tab opens and its page loads

@@ -215,6 +215,18 @@
         "icon": "$(check-all)"
       },
       {
+        "command": "ghPrReview.openAllChanges",
+        "title": "Open All Changes",
+        "category": "GH PR Review",
+        "icon": "$(diff-multiple)"
+      },
+      {
+        "command": "ghPrReview.openFolderChanges",
+        "title": "Open Changes of Folder",
+        "category": "GH PR Review",
+        "icon": "$(diff-multiple)"
+      },
+      {
         "command": "ghPrReview.openNextUnviewed",
         "title": "Open Next Unviewed File",
         "category": "GH PR Review",
@@ -316,6 +328,7 @@
         { "command": "ghPrReview.openChangesSinceViewed", "when": "false" },
         { "command": "ghPrReview.compareWithCommit", "when": "false" },
         { "command": "ghPrReview.toggleDiffMode", "when": "false" },
+        { "command": "ghPrReview.openFolderChanges", "when": "false" },
         { "command": "ghPrReview.openLocalFile", "when": "false" },
         { "command": "ghPrReview.copyPath", "when": "false" },
         { "command": "ghPrReview.copyLink", "when": "false" },
@@ -339,6 +352,7 @@
         { "command": "ghPrReview.openOnGitHub", "when": "ghPrReview.hasFocusedPr" },
         { "command": "ghPrReview.checkout", "when": "ghPrReview.hasFocusedPr" },
         { "command": "ghPrReview.openNextUnviewed", "when": "ghPrReview.hasFocusedPr" },
+        { "command": "ghPrReview.openAllChanges", "when": "ghPrReview.hasFocusedPr" },
         { "command": "ghPrReview.submitReview", "when": "ghPrReview.hasFocusedPr" },
         { "command": "ghPrReview.discardReview", "when": "ghPrReview.hasPendingReview" }
       ],
@@ -351,6 +365,11 @@
         {
           "command": "ghPrReview.openPrByNumber",
           "when": "view == ghPrReview.prs"
+        },
+        {
+          "command": "ghPrReview.openAllChanges",
+          "when": "view == ghPrReview.changes && ghPrReview.hasFocusedPr",
+          "group": "navigation@0"
         },
         {
           "command": "ghPrReview.openNextUnviewed",
@@ -448,6 +467,16 @@
           "command": "ghPrReview.openLocalFile",
           "when": "view == ghPrReview.changes && viewItem =~ /^file\\b.*\\blocal\\b/",
           "group": "1_open@4"
+        },
+        {
+          "command": "ghPrReview.openFolderChanges",
+          "when": "view == ghPrReview.changes && viewItem =~ /^folder\\b/",
+          "group": "inline@0"
+        },
+        {
+          "command": "ghPrReview.openFolderChanges",
+          "when": "view == ghPrReview.changes && viewItem =~ /^folder\\b/",
+          "group": "1_open@1"
         },
         {
           "command": "ghPrReview.markViewed",

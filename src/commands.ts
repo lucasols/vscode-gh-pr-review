@@ -13,6 +13,7 @@ import {
   getLocalFileUri,
   openDiffSinceCommit,
   openFileDiff,
+  openStackedChanges,
   type DiffMode,
 } from './views/diffOpener'
 import type { OverviewPanels } from './views/overviewPanel'
@@ -357,6 +358,30 @@ export function registerCommands(
     },
 
     'ghPrReview.openNextUnviewed': () => openNextUnviewed(),
+
+    'ghPrReview.openAllChanges': async () => {
+      const prKey = store.focusedKey
+      if (!prKey) return
+      // the files of the view, so the order and the hidden viewed files match it
+      await vscode.window.withProgress({ location: { viewId: 'ghPrReview.changes' } }, () =>
+        openStackedChanges(services, prKey, views.changes.getOrderedFiles(), {
+          onlyUnviewed: config.hideViewedFiles(),
+        }),
+      )
+    },
+
+    'ghPrReview.openFolderChanges': async (arg) => {
+      if (!isChangesNode(arg) || arg.kind !== 'folder') return
+      // the folder only has the files that the view shows
+      const paths = new Set(collectNodePaths(arg))
+      const files = views.changes.getOrderedFiles().filter((file) => paths.has(file.path))
+      await vscode.window.withProgress({ location: { viewId: 'ghPrReview.changes' } }, () =>
+        openStackedChanges(services, arg.prKey, files, {
+          onlyUnviewed: config.hideViewedFiles(),
+          folder: arg.path,
+        }),
+      )
+    },
 
     'ghPrReview.viewAsTree': () => config.setFileLayout('tree'),
     'ghPrReview.viewAsList': () => config.setFileLayout('list'),

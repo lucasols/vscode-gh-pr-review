@@ -3,7 +3,7 @@ import * as vscode from 'vscode'
 import { config } from '../config'
 import { baseDocRef, commitDocRef, headDocRef, viewedDocRef } from '../content/docRef'
 import { toDocUri } from '../content/ghprFs'
-import { isChangedSinceViewed } from '../model/baselines'
+import { isChangedSinceViewed, type Baseline } from '../model/baselines'
 import type { PrDetail, PrFile } from '../model/types'
 import type { Services } from '../services'
 import { gitBlobSha } from '../util/gitBlobHash'
@@ -70,6 +70,76 @@ async function loadFile(
   return { detail, file }
 }
 
+/** Whether the left side of a diff is the version of the file that was viewed */
+function showsSinceViewed(
+  mode: DiffMode,
+  file: PrFile,
+  baseline: Baseline | undefined,
+): baseline is Baseline {
+  if (!baseline) return false
+  if (mode === 'sinceViewed') return true
+  return (
+    mode === 'auto' &&
+    config.defaultDiff() === 'sinceViewed' &&
+    isChangedSinceViewed(file, baseline)
+  )
+}
+
+// VS Code appends the number of files to the title of the tab
+const STACKED_TITLE = /^(?:All|Unviewed) Changes in (.+?)(?: \([^()]*\))?$/
+
+/**
+ * Opens the diffs of the given files stacked in one editor. Each file is
+ * compared like a click on it does: a file that changed after it was viewed
+ * shows only the changes made since then.
+ */
+export async function openStackedChanges(
+  services: Services,
+  prKey: string,
+  files: readonly PrFile[],
+  options: { onlyUnviewed: boolean; folder?: string },
+): Promise<void> {
+  const detail = services.store.getDetail(prKey)
+  if (!detail) return
+  const { number } = detail.summary
+  const scope =
+    options.folder === undefined ? `#${number}` : `#${number} › ${options.folder}`
+
+  if (files.length === 0) {
+    void vscode.window.showInformationMessage(
+      detail.files.length > 0 ?
+        `All files of ${scope} are viewed.`
+      : `#${number} has no changed files.`,
+    )
+    return
+  }
+
+  const baselines = services.store.getBaselines(prKey)
+  const resources = await Promise.all(
+    files.map(async (file) => {
+      const baseline = baselines[file.path]
+      const left =
+        showsSinceViewed('auto', file, baseline) ?
+          toDocUri(viewedDocRef(detail, file, baseline))
+        : toDocUri(baseDocRef(detail, file))
+      const right = await resolveHeadUri(services, prKey, detail, file)
+      return [right, left, right] as const
+    }),
+  )
+
+  // the editor is a snapshot, so a new one replaces the one that is open
+  const stale = vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .filter((tab) => STACKED_TITLE.exec(tab.label)?.[1] === scope)
+  if (stale.length > 0) await vscode.window.tabGroups.close(stale, true)
+
+  await vscode.commands.executeCommand(
+    'vscode.changes',
+    `${options.onlyUnviewed ? 'Unviewed' : 'All'} Changes in ${scope}`,
+    resources,
+  )
+}
+
 /**
  * Opens the diff of a file. In `auto` mode a file that changed after it was
  * viewed opens with only the changes made since then.
@@ -96,14 +166,7 @@ export async function openFileDiff(
     return
   }
 
-  const showSinceViewed =
-    baseline !== undefined &&
-    (mode === 'sinceViewed' ||
-      (mode === 'auto' &&
-        config.defaultDiff() === 'sinceViewed' &&
-        isChangedSinceViewed(file, baseline)))
-
-  if (showSinceViewed) {
+  if (showsSinceViewed(mode, file, baseline)) {
     left = toDocUri(viewedDocRef(detail, file, baseline))
     label = 'Changes Since Viewed'
   } else {
