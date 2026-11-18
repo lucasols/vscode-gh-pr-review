@@ -145,6 +145,11 @@
         "category": "GH PR Review"
       },
       {
+        "command": "ghPrReview.configureQuickAddLabels",
+        "title": "Configure Quick Add Labels…",
+        "category": "GH PR Review"
+      },
+      {
         "command": "ghPrReview.openDescription",
         "title": "Open Pull Request Description",
         "category": "GH PR Review",
@@ -481,6 +486,10 @@
         },
         {
           "command": "ghPrReview.configureReviewers",
+          "when": "view == ghPrReview.prs"
+        },
+        {
+          "command": "ghPrReview.configureQuickAddLabels",
           "when": "view == ghPrReview.prs"
         },
         {
@@ -855,7 +864,20 @@
             }
           },
           "default": {},
-          "markdownDescription": "Who is offered in the dropdown of the reviewers of a pull request, by repository. The keys are `owner/repository` and the values are logins of users or slugs of teams, e.g. `{ \"acme/app\": [\"ana\", \"bruno\"] }`. A repository that is not listed offers everyone who can review. Who already is a reviewer of a pull request is always shown in it. The command **GH PR Review: Configure Repository Reviewers…** edits this setting."
+          "markdownDescription": "Who is offered in the dropdown of the reviewers of a pull request, by repository. The keys are `owner/repository` and the values are logins of users or slugs of teams, e.g. `{ \"acme/app\": [\"ana\", \"bruno\"] }`. A repository that is not listed offers everyone who can review. Who already is a reviewer of a pull request is always shown in it. The overview of a pull request also shows a button for each of them that is not a reviewer yet, which requests the review with one click. The command **GH PR Review: Configure Repository Reviewers…** edits this setting."
+        },
+        "ghPrReview.quickAddLabels": {
+          "type": "object",
+          "scope": "application",
+          "additionalProperties": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "default": {},
+          "markdownDescription": "The labels that the overview of a pull request adds with one click, by repository. The keys are `owner/repository` and the values are names of labels of the repository, e.g. `{ \"acme/app\": [\"bug\", \"Beta Feature\"] }`. A button is shown for each label that the pull request does not have yet, in this order. The command **GH PR Review: Configure Quick Add Labels…** edits this setting."
         }
       }
     }

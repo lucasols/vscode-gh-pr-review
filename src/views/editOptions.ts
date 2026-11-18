@@ -26,7 +26,8 @@ function checkedFirst<T extends { checked: boolean }>(items: readonly T[]): T[] 
 /** The labels that the pull request can have. The checked ones are the ones it has */
 export async function loadLabelEdit(services: Services, prKey: string): Promise<EditSession> {
   const { store } = services
-  const available = await store.fetchLabelOptions(prKey)
+  const repo = parsePrKey(prKey)
+  const available = repo ? await store.fetchLabelOptions(repo) : []
   // read after the options, so that the checked labels are the latest known
   const labels = store.getDetail(prKey)?.overview.labels ?? []
   const current = new Set(labels.map((label) => label.id))

@@ -465,6 +465,52 @@ button.link:hover:not(:disabled) {
   font-weight: 600;
 }
 
+.quick-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+button.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 1px 9px 1px 6px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: none;
+  font-size: 0.9em;
+}
+
+button.chip:hover:not(:disabled) {
+  border-style: solid;
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+}
+
+.chip .avatar {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.chip .dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .progress {
   height: 6px;
   margin-top: 6px;

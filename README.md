@@ -33,7 +33,11 @@ Pull Requests extension that is built around two things:
   reviewers and the labels can be edited in a dropdown of the page when you
   have the permission: a click outside of it saves, Esc cancels. The command
   **Configure Repository Reviewers…** picks who is offered as a reviewer in a
-  repository, and stores them in `ghPrReview.reviewers`. The merge
+  repository, and stores them in `ghPrReview.reviewers`. Each of them that is
+  not a reviewer yet also gets a button under the reviewers, which requests
+  the review with one click. The command **Configure Quick Add Labels…** picks
+  the labels of a repository that get such a button under the labels, and
+  stores them in `ghPrReview.quickAddLabels`. The merge
   button is disabled while GitHub would reject the merge, and auto-merge can
   be enabled or disabled when the repository allows it. Mermaid
   diagrams of the description and of the comments are rendered.
@@ -95,6 +99,7 @@ unmark stays unmarked.
 | `ghPrReview.useLocalFiles`                      | `true`       | Use the files of the workspace in the diffs      |
 | `ghPrReview.authSource`                         | `auto`       | `vscode` account, `gh-cli`, or `auto` for both   |
 | `ghPrReview.reviewers`                          | `{}`         | Who is offered as a reviewer, by repository (user setting) |
+| `ghPrReview.quickAddLabels`                     | `{}`         | The labels that one click adds, by repository (user setting) |
 
 ## Authentication
 

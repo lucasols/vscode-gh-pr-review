@@ -790,10 +790,9 @@ export class PrStore {
     await Promise.all([this.refreshDetail(key), this.refreshLists()])
   }
 
-  /** The labels of the repository of a pull request */
-  async fetchLabelOptions(key: string): Promise<LabelOption[]> {
-    const ref = parsePrKey(key)
-    return ref ? this.deps.api.fetchLabels(ref) : []
+  /** The labels that the pull requests of a repository can have */
+  fetchLabelOptions(repo: RepoRef): Promise<LabelOption[]> {
+    return this.deps.api.fetchLabels(repo)
   }
 
   /** The users and the teams that can review the pull requests of a repository */

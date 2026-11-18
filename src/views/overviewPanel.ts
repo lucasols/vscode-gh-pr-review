@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
+import { config } from '../config'
 import type { Disposable } from '../util/emitter'
 import { getMergeBlock } from '../model/mergeBlock'
 import type { MergeMethod, PrDetail, ReviewEvent } from '../model/types'
@@ -15,6 +16,7 @@ import { errorMessage } from '../util/async'
 import css from '../webview/overview.css'
 import { loadLabelEdit, loadReviewerEdit, type EditSession } from './editOptions'
 import { buildOverviewState } from './overviewState'
+import { QuickAdd } from './quickAdd'
 
 const VIEW_TYPE = 'ghPrReview.overview'
 
@@ -69,17 +71,23 @@ function panelTitle(prKey: string, detail: PrDetail | undefined, title?: string)
 export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSerializer {
   private readonly panels = new Map<string, OpenPanel>()
   private readonly subscriptions: vscode.Disposable[] = []
+  private readonly quickAdd: QuickAdd
 
   constructor(
     private readonly services: Services,
     private readonly actions: OverviewActions,
   ) {
     const { store } = services
+    this.quickAdd = new QuickAdd(store, () => this.postAll())
     this.subscriptions.push(
       vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, this),
       store.onDidChangeDetail((key) => this.post(key)),
-      store.onDidChangeLists(() => {
-        for (const key of this.panels.keys()) this.post(key)
+      store.onDidChangeLists(() => this.postAll()),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        // the buttons of quick add come from these settings
+        if (config.affects(event, 'reviewers') || config.affects(event, 'quickAddLabels')) {
+          this.postAll()
+        }
       }),
     )
   }
@@ -145,6 +153,10 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
     void open.panel.webview.postMessage(message)
   }
 
+  private postAll(): void {
+    for (const key of this.panels.keys()) this.post(key)
+  }
+
   private post(prKey: string): void {
     const open = this.panels.get(prKey)
     if (!open?.ready) return
@@ -165,6 +177,7 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
         detail,
         isCheckedOut: store.getCheckoutOf(prKey) !== undefined,
         canCheckout: store.getRepoForPr(prKey) !== undefined,
+        quickAdd: this.quickAdd.options(prKey, detail),
         refreshError: store.getDetailError(prKey),
       }),
     })
@@ -202,6 +215,8 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
         return
 
       case 'refresh':
+        this.quickAdd.reload(prKey)
+        this.post(prKey)
         await this.run(open, 'refresh', 'Could not refresh', async () => {
           await Promise.all([store.refreshDetail(prKey), store.refreshLists()])
         })
@@ -276,6 +291,14 @@ export class OverviewPanels implements vscode.Disposable, vscode.WebviewPanelSer
         if (edit?.field !== message.field) return
         open.edit = undefined
         const save = edit.session?.save(new Set(message.checked))
+        if (!save) return
+        const { action, failure } = EDITS[message.field]
+        await this.run(open, action, failure, save)
+        return
+      }
+
+      case 'quickAdd': {
+        const save = this.quickAdd.save(prKey, message.field, message.keys)
         if (!save) return
         const { action, failure } = EDITS[message.field]
         await this.run(open, action, failure, save)

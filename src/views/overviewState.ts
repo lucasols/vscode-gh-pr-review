@@ -1,6 +1,6 @@
 import { getMergeBlock } from '../model/mergeBlock'
 import type { PrDetail } from '../model/types'
-import type { OverviewState } from '../shared/overviewProtocol'
+import type { OverviewQuickAddOption, OverviewState } from '../shared/overviewProtocol'
 
 /** Builds what the overview page of a pull request shows */
 export function buildOverviewState(args: {
@@ -8,6 +8,7 @@ export function buildOverviewState(args: {
   detail: PrDetail
   isCheckedOut: boolean
   canCheckout: boolean
+  quickAdd: { reviewers: OverviewQuickAddOption[]; labels: OverviewQuickAddOption[] }
   refreshError: string | undefined
 }): OverviewState {
   const { detail } = args
@@ -63,6 +64,8 @@ export function buildOverviewState(args: {
     viewerCanUpdate: overview.viewerCanUpdate,
     canEditLabels: overview.viewerCanLabel,
     canEditReviewers: overview.viewerCanRequestReviews && summary.state === 'OPEN',
+    quickAddReviewers: args.quickAdd.reviewers,
+    quickAddLabels: args.quickAdd.labels,
     viewerDidAuthor: overview.viewerDidAuthor,
     pendingReviewComments: detail.pendingReview?.commentCount,
     isCheckedOut: args.isCheckedOut,

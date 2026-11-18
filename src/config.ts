@@ -2,8 +2,9 @@ import * as vscode from 'vscode'
 import { z } from 'zod'
 import type { ListQuery } from './github/api'
 import type { NonRelevantChangeKind } from './model/changeClassifier'
-import { reviewersOf, withReviewers } from './util/repoReviewers'
 import { repoKey, type RepoRef } from './util/remoteUrl'
+import { reviewersOf } from './util/repoReviewers'
+import { namesOf, withNames, type RepoSetting } from './util/repoSetting'
 
 const SECTION = 'ghPrReview'
 
@@ -11,7 +12,7 @@ export const AUTO_MARK_SETTING = 'autoMarkNonRelevantChangesAsViewed'
 
 const queriesSchema = z.array(z.object({ label: z.string(), query: z.string() }))
 const autoMarkSchema = z.array(z.enum(['lockfile', 'renameOnly', 'importsOnly']))
-const reviewersSchema = z.record(z.string(), z.array(z.string()))
+const repoSettingSchema = z.record(z.string(), z.array(z.string()))
 
 const DEFAULT_QUERIES: ListQuery[] = [
   { label: 'Waiting For My Review', query: 'is:open review-requested:@me' },
@@ -21,6 +22,26 @@ const DEFAULT_QUERIES: ListQuery[] = [
 
 function get(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration(SECTION)
+}
+
+type RepoSettingName = 'reviewers' | 'quickAddLabels'
+
+function repoSetting(name: RepoSettingName): RepoSetting {
+  const parsed = repoSettingSchema.safeParse(get().get(name))
+  return parsed.success ? parsed.data : {}
+}
+
+/** These settings belong to the user, so they are the same in every clone of a repository */
+function setRepoSetting(
+  name: RepoSettingName,
+  repo: RepoRef,
+  names: readonly string[],
+): Thenable<void> {
+  return get().update(
+    name,
+    withNames(repoSetting(name), repoKey(repo), names),
+    vscode.ConfigurationTarget.Global,
+  )
 }
 
 export const config = {
@@ -69,18 +90,20 @@ export const config = {
    * in lower case. Undefined when everyone is offered.
    */
   reviewers(repo: RepoRef): Set<string> | undefined {
-    const parsed = reviewersSchema.safeParse(get().get('reviewers'))
-    return reviewersOf(parsed.success ? parsed.data : {}, repoKey(repo))
+    return reviewersOf(repoSetting('reviewers'), repoKey(repo))
   },
 
-  /** The setting belongs to the user, so it is the same in every clone of a repository */
   setReviewers(repo: RepoRef, reviewers: readonly string[]): Thenable<void> {
-    const parsed = reviewersSchema.safeParse(get().get('reviewers'))
-    return get().update(
-      'reviewers',
-      withReviewers(parsed.success ? parsed.data : {}, repoKey(repo), reviewers),
-      vscode.ConfigurationTarget.Global,
-    )
+    return setRepoSetting('reviewers', repo, reviewers)
+  },
+
+  /** The names of the labels that the overview adds with one click in a repository */
+  quickAddLabels(repo: RepoRef): string[] {
+    return namesOf(repoSetting('quickAddLabels'), repoKey(repo))
+  },
+
+  setQuickAddLabels(repo: RepoRef, labels: readonly string[]): Thenable<void> {
+    return setRepoSetting('quickAddLabels', repo, labels)
   },
 
   affects(event: vscode.ConfigurationChangeEvent, name: string): boolean {

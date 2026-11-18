@@ -846,6 +846,48 @@ function renderSidebar(state: OverviewState): void {
     )
   const none = (text: string) => h('div', { class: 'muted' }, text)
 
+  /** A button for each thing that one click adds to the pull request */
+  const quickAdd = (
+    field: OverviewEditField,
+    options: OverviewState['quickAddReviewers'],
+    texts: { one: (name: string) => string; all?: string },
+  ) => {
+    if (options.length === 0) return undefined
+    const chip = (keys: string[], title: string, ...children: Child[]) =>
+      h(
+        'button',
+        {
+          class: 'chip',
+          disabled: busyAction !== undefined,
+          title,
+          onclick: () => send({ type: 'quickAdd', field, keys }),
+        },
+        ...children,
+      )
+    return h(
+      'div',
+      { class: 'quick-add' },
+      ...options.map((option) => {
+        const color = /^[0-9a-f]{6}$/i.test(option.color ?? '') ? option.color : undefined
+        return chip(
+          [option.key],
+          [texts.one(option.label), option.description].filter(Boolean).join(' · '),
+          field === 'reviewers' ?
+            avatar({ login: option.label, avatarUrl: option.avatarUrl })
+          : h('span', { class: 'dot', style: color ? `background: #${color}` : undefined }),
+          h('span', { class: 'chip-text' }, `+ ${option.label}`),
+        )
+      }),
+      texts.all !== undefined &&
+        options.length > 1 &&
+        chip(
+          options.map((option) => option.key),
+          `${texts.all}: ${options.map((option) => option.label).join(', ')}`,
+          h('span', { class: 'chip-text' }, '+ All'),
+        ),
+    )
+  }
+
   const reviewerIcon = (reviewerState: OverviewState['reviewers'][number]['state']) => {
     switch (reviewerState) {
       case 'APPROVED':
@@ -892,6 +934,10 @@ function renderSidebar(state: OverviewState): void {
           reviewerIcon(reviewer.state),
         ),
       ),
+      quickAdd('reviewers', state.quickAddReviewers, {
+        one: (name) => `Request a review from ${name}`,
+        all: 'Request a review from all of them',
+      }),
     ),
     section(
       'Assignees',
@@ -914,6 +960,7 @@ function renderSidebar(state: OverviewState): void {
           label.name,
         ),
       ),
+      quickAdd('labels', state.quickAddLabels, { one: (name) => `Add the label ${name}` }),
     ),
     section('Milestone', state.milestone ? h('div', {}, state.milestone) : none('No milestone')),
     section(

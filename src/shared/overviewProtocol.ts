@@ -57,6 +57,17 @@ const threadSchema = z.object({
   ),
 })
 
+/** Something that a button of the side bar adds to the pull request with one click */
+const quickAddOptionSchema = z.object({
+  /** What the page sends back when its button is clicked */
+  key: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  /** The color of a label, as six hex digits */
+  color: z.string().optional(),
+  avatarUrl: z.string().optional(),
+})
+
 export const overviewStateSchema = z.object({
   prKey: z.string(),
   number: z.number(),
@@ -125,6 +136,10 @@ export const overviewStateSchema = z.object({
   viewerCanUpdate: z.boolean(),
   canEditLabels: z.boolean(),
   canEditReviewers: z.boolean(),
+  /** Who the user picked for the repository and is not a reviewer yet */
+  quickAddReviewers: z.array(quickAddOptionSchema),
+  /** The labels that the user picked for the repository and the pull request lacks */
+  quickAddLabels: z.array(quickAddOptionSchema),
   viewerDidAuthor: z.boolean(),
   pendingReviewComments: z.number().optional(),
   isCheckedOut: z.boolean(),
@@ -151,6 +166,7 @@ const editOptionSchema = z.object({
 })
 
 export type OverviewEditField = z.infer<typeof editFieldSchema>
+export type OverviewQuickAddOption = z.infer<typeof quickAddOptionSchema>
 export type OverviewEditOption = z.infer<typeof editOptionSchema>
 
 export const toWebviewMessageSchema = z.discriminatedUnion('type', [
@@ -193,6 +209,12 @@ export const fromWebviewMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('applyEdit'),
     field: editFieldSchema,
     checked: z.array(z.string()),
+  }),
+  /** Buttons of quick add were clicked: these reviewers or labels are added */
+  z.object({
+    type: z.literal('quickAdd'),
+    field: editFieldSchema,
+    keys: z.array(z.string()),
   }),
   z.object({ type: z.literal('comment'), body: z.string() }),
   z.object({ type: z.literal('review'), event: reviewEventSchema, body: z.string() }),
