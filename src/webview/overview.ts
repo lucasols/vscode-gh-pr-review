@@ -146,12 +146,15 @@ function actionButton(
   label: string,
   busyLabel: string,
   onClick: () => void,
-  options: { primary?: boolean; disabled?: boolean; title?: string } = {},
+  options: { primary?: boolean; attention?: boolean; disabled?: boolean; title?: string } = {},
 ): HTMLElement {
   return h(
     'button',
     {
-      class: options.primary ? 'primary' : undefined,
+      class:
+        options.attention ? 'attention'
+        : options.primary ? 'primary'
+        : undefined,
       disabled: options.disabled === true || busyAction !== undefined,
       title: options.title,
       onclick: onClick,
@@ -402,7 +405,8 @@ function renderHeader(state: OverviewState): void {
       state.isCheckedOut ?
         h('button', { disabled: true, title: 'This branch is checked out' }, '✓ Checked out')
       : actionButton('checkout', 'Checkout', 'Checking out…', () => send({ type: 'checkout' }), {
-          primary: true,
+          // yellow, so that it is not taken for the pull request of the current branch
+          attention: true,
           disabled: !state.canCheckout,
           title:
             state.canCheckout ? undefined : (

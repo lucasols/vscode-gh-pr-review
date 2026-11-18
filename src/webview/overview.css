@@ -71,6 +71,15 @@ button.primary:hover:not(:disabled) {
   background: var(--vscode-button-hoverBackground);
 }
 
+button.attention {
+  color: #1f1300;
+  background: #d29922;
+}
+
+button.attention:hover:not(:disabled) {
+  background: #e3b341;
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: default;
