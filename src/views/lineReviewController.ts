@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { docRefPrKey, headDocRef } from '../content/docRef'
 import { fromDocUri } from '../content/ghprFs'
 import { isFullyReviewed } from '../model/lineReviews'
+import { openFileDiff } from './diffOpener'
 import type { PrDetail, PrFile } from '../model/types'
 import type { Services } from '../services'
 import { errorMessage } from '../util/async'
@@ -13,13 +14,17 @@ import type { LineRange } from '../util/patch'
 import { warnAboutLocalChanges } from './localChanges'
 
 /** A document that shows a version of a file of a pull request whose lines can be marked */
-type EditorTarget = {
-  prKey: string
-  detail: PrDetail
-  file: PrFile
-  /** Maps the lines of the head version (source) to the document (target) */
-  mapper: LineMapper
-}
+type EditorTarget =
+  | {
+      kind: 'current'
+      prKey: string
+      detail: PrDetail
+      file: PrFile
+      /** Maps the lines of the head version (source) to the document (target) */
+      mapper: LineMapper
+    }
+  /** The diff was opened before the file changed in the pull request */
+  | { kind: 'stale'; prKey: string; path: string }
 
 /** The lines (1-based) that the selections of an editor cover */
 function selectedLines(editor: vscode.TextEditor): LineRange[] {
@@ -66,9 +71,12 @@ export class LineReviewController implements vscode.Disposable {
       const prKey = docRefPrKey(ref)
       const detail = store.getDetail(prKey)
       const file = detail?.files.find((item) => item.path === ref.path)
+      if (!detail || !file) return undefined
       // an editor that was opened before a push shows a version that is gone
-      if (!detail || !file || file.blobSha !== ref.blob) return undefined
-      if (ref.side === 'head') return { prKey, detail, file, mapper: IDENTITY_MAPPER }
+      if (file.blobSha !== ref.blob) return { kind: 'stale', prKey, path: file.path }
+      if (ref.side === 'head') {
+        return { kind: 'current', prKey, detail, file, mapper: IDENTITY_MAPPER }
+      }
 
       // the reviewed version has the lines of the head version that were reviewed
       const head = await content.readText(headDocRef(detail, file))
@@ -77,7 +85,7 @@ export class LineReviewController implements vscode.Disposable {
         file,
         store.getBaselines(prKey)[file.path],
       )
-      return { prKey, detail, file, mapper: createLineMapper(head, reviewed) }
+      return { kind: 'current', prKey, detail, file, mapper: createLineMapper(head, reviewed) }
     }
 
     if (document.uri.scheme !== 'file') return undefined
@@ -87,10 +95,10 @@ export class LineReviewController implements vscode.Disposable {
     // the file of the workspace can have edits that the pull request does not have
     const text = document.getText()
     if (gitBlobSha(new TextEncoder().encode(text)) === local.file.blobSha) {
-      return { ...local, mapper: IDENTITY_MAPPER }
+      return { kind: 'current', ...local, mapper: IDENTITY_MAPPER }
     }
     const head = await content.readText(headDocRef(local.detail, local.file))
-    return { ...local, mapper: createLineMapper(head, text) }
+    return { kind: 'current', ...local, mapper: createLineMapper(head, text) }
   }
 
   /** A file of the workspace that belongs to the pull request of its branch */
@@ -122,6 +130,13 @@ export class LineReviewController implements vscode.Disposable {
         void vscode.window.showInformationMessage(
           'Lines can be marked as reviewed in the diff of the current version of a file of the pull request, or in the file of the workspace.',
         )
+        return
+      }
+      if (target.kind === 'stale') {
+        void vscode.window.showWarningMessage(
+          'This file changed in the pull request after this diff was opened. The current version was opened instead: mark the lines there.',
+        )
+        await openFileDiff(this.services, target.prKey, target.path, 'auto')
         return
       }
       const { prKey, detail, file, mapper } = target

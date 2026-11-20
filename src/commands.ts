@@ -41,7 +41,9 @@ export function registerCommands(
       const prKey = docRefPrKey(ref)
       const file = store.getDetail(prKey)?.files.find((item) => item.path === ref.path)
       const isStale =
-        ref.side === 'head' && ref.blob !== undefined && file?.blobSha !== ref.blob
+        (ref.side === 'head' || ref.side === 'reviewed') &&
+        ref.blob !== undefined &&
+        file?.blobSha !== ref.blob
       return { prKey, paths: [ref.path], isStale }
     }
 

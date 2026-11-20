@@ -263,4 +263,16 @@ describe('LineReviews', () => {
     expect(Object.keys(records.get('acme/app#7'))).toEqual(['src/b.ts'])
     expect(changes).toHaveBeenCalledWith('acme/app#7')
   })
+
+  test('the reviewed version of an older head carries the lines reviewed in a newer one', async () => {
+    const { reviews } = setup({ 'blob-2': 'a\nb\nC\nd\ne\n' })
+    const newer = file({ blobSha: 'blob-2' })
+    await reviews.setReviewed(makeDetail([newer]), newer, undefined, [r(1, 5)], true)
+
+    // a diff that was opened before the push still shows blob-1
+    const older = file()
+    expect(await reviews.reviewedText(makeDetail([newer]), older, undefined)).toBe(
+      'a\nb\nd\ne\n',
+    )
+  })
 })

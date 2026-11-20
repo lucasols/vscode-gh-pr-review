@@ -3,7 +3,6 @@ import * as vscode from 'vscode'
 import { registerCommands } from './commands'
 import { AUTO_MARK_SETTING, config } from './config'
 import { ContentService } from './content/contentService'
-import { docRefPrKey } from './content/docRef'
 import { GHPR_SCHEME, GhprFileSystem } from './content/ghprFs'
 import { checkoutPr } from './git/checkout'
 import { git } from './git/gitCli'
@@ -25,6 +24,7 @@ import { CommentsController } from './views/comments'
 import { TreeDecorationProvider } from './views/decorations'
 import { getLocalFileUri, openFileDiff } from './views/diffOpener'
 import { LineReviewController } from './views/lineReviewController'
+import { createReviewedSource } from './views/reviewedVersion'
 import { OverviewPanels } from './views/overviewPanel'
 import { PrListView } from './views/prListView'
 import { PrStatusBar } from './views/statusBar'
@@ -106,14 +106,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   })
   const services: Services = { context, store, content, classifier, lineReviews, auth }
 
-  const ghprFs = new GhprFileSystem(content, async (ref) => {
-    const prKey = docRefPrKey(ref)
-    if (!store.getDetail(prKey)) await store.refreshDetail(prKey)
-    const detail = store.getDetail(prKey)
-    const file = detail?.files.find((item) => item.path === ref.path)
-    if (!detail || !file) throw new Error(`${ref.path} is not part of the pull request`)
-    return lineReviews.reviewedText(detail, file, store.getBaselines(prKey)[file.path])
-  })
+  const ghprFs = new GhprFileSystem(content, createReviewedSource(services))
 
   const decorations = new TreeDecorationProvider()
   const changes = new ChangesView(services)
