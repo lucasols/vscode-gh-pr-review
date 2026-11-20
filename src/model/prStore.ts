@@ -265,6 +265,11 @@ export class PrStore {
     }
   }
 
+  /** The data of a pull request as GitHub sent it, without the changes being saved */
+  getConfirmedDetail(key: string): PrDetail | undefined {
+    return this.details.get(key)
+  }
+
   getLoadedKeys(): string[] {
     return [...this.details.keys()]
   }

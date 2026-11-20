@@ -17,8 +17,10 @@ const docRefSchema = z.object({
    * `base` and `head` are the two sides of the diff of the pull request,
    * `viewed` is the version that was marked as viewed, `commit` is the version
    * of a chosen commit and `empty` stands for a file that does not exist.
+   * `reviewed` is the version with the reviewed lines applied: unlike the
+   * others its content changes, and `blob` is the head version it belongs to.
    */
-  side: z.enum(['base', 'head', 'viewed', 'commit', 'empty']),
+  side: z.enum(['base', 'head', 'viewed', 'commit', 'empty', 'reviewed']),
   /** Content addressed by git blob */
   blob: z.string().optional(),
   /** Content addressed by the path in a commit */
@@ -87,6 +89,14 @@ export function baseDocRef(detail: PrDetail, file: PrFile): DocRef {
 export function viewedDocRef(detail: PrDetail, file: PrFile, baseline: Baseline): DocRef {
   if (baseline.blob === REMOVED_BLOB) return { ...base(detail, file), side: 'empty' }
   return { ...base(detail, file), side: 'viewed', blob: baseline.blob }
+}
+
+/**
+ * The version that the review of the file started from, with the lines that
+ * were reviewed applied (see `LineReviews`)
+ */
+export function reviewedDocRef(detail: PrDetail, file: PrFile): DocRef {
+  return { ...base(detail, file), side: 'reviewed', blob: file.blobSha }
 }
 
 /** The version of the file in a commit of the pull request */

@@ -84,7 +84,7 @@ export class ChangesView implements vscode.TreeDataProvider<ChangesNode>, vscode
       manageCheckboxStateManually: true,
     })
 
-    const { store, classifier } = services
+    const { store, classifier, lineReviews } = services
     this.subscriptions.push(
       this.treeView,
       this.emitter,
@@ -94,6 +94,9 @@ export class ChangesView implements vscode.TreeDataProvider<ChangesNode>, vscode
       }),
       store.onDidChangeLists(() => this.rebuildSoon.call()),
       classifier.onDidChange((key) => {
+        if (key === store.focusedKey) this.rebuildSoon.call()
+      }),
+      lineReviews.onDidChange((key) => {
         if (key === store.focusedKey) this.rebuildSoon.call()
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
@@ -312,7 +315,7 @@ export class ChangesView implements vscode.TreeDataProvider<ChangesNode>, vscode
     node: Extract<ChangesNode, { kind: 'file' }>,
     detail: PrDetail | undefined,
   ): vscode.TreeItem {
-    const { store, classifier } = this.services
+    const { store, classifier, lineReviews } = this.services
     const { file } = node
     const baseline = store.getBaselines(node.prKey)[file.path]
     const changedSinceViewed = isChangedSinceViewed(file, baseline)
@@ -344,12 +347,24 @@ export class ChangesView implements vscode.TreeDataProvider<ChangesNode>, vscode
       detail?.threads.filter((thread) => thread.path === file.path && !thread.isResolved)
         .length ?? 0
 
+    // only files with reviewed lines are looked at, the others are at 0%
+    const lineReview =
+      !isViewed && detail && lineReviews.hasReviewedLines(node.prKey, file.path) ?
+        lineReviews.get(detail, file, baseline)
+      : undefined
+    const reviewedLines =
+      lineReview && lineReview.reviewedCount > 0 ? lineReview : undefined
+
     const description: string[] = []
     if (config.fileLayout() === 'list') {
       const folder = file.path.slice(0, Math.max(0, file.path.lastIndexOf('/')))
       if (folder) description.push(folder)
     }
     if (changedSinceViewed) description.push('changed since viewed')
+    if (reviewedLines) {
+      const percent = Math.floor((100 * reviewedLines.reviewedCount) / reviewedLines.total)
+      description.push(`${percent}% reviewed`)
+    }
     if (nonRelevant) description.push(CHANGE_KIND_LABELS[nonRelevant])
     if (comments > 0) description.push(`${comments} ${comments === 1 ? 'comment' : 'comments'}`)
     item.description = description.join(' · ')
@@ -363,6 +378,11 @@ export class ChangesView implements vscode.TreeDataProvider<ChangesNode>, vscode
         sinceViewedIsDefault ?
           '\nChanged after you viewed it. Opens with only the changes made since then.'
         : '\nChanged after you viewed it.',
+      )
+    }
+    if (reviewedLines) {
+      tooltip.appendText(
+        `\n${reviewedLines.reviewedCount} of ${reviewedLines.total} changed lines reviewed`,
       )
     }
     if (nonRelevant) tooltip.appendText(`\n${CHANGE_KIND_TOOLTIPS[nonRelevant]}`)

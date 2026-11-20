@@ -50,6 +50,9 @@ export class ContentService {
   }
 
   read(ref: DocRef): Promise<Uint8Array> {
+    if (ref.side === 'reviewed') {
+      return Promise.reject(new Error('The reviewed version is not addressed by git'))
+    }
     const key = ContentService.key(ref)
     if (!key) return Promise.resolve(EMPTY)
 

@@ -230,6 +230,24 @@
         "icon": "$(check-all)"
       },
       {
+        "command": "ghPrReview.markLinesReviewed",
+        "title": "Mark Selected Lines as Reviewed",
+        "category": "GH PR Review",
+        "icon": "$(check)"
+      },
+      {
+        "command": "ghPrReview.markLinesNotReviewed",
+        "title": "Mark Selected Lines as Not Reviewed",
+        "category": "GH PR Review",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "ghPrReview.markAboveReviewed",
+        "title": "Mark Lines Above as Reviewed",
+        "category": "GH PR Review",
+        "icon": "$(fold-up)"
+      },
+      {
         "command": "ghPrReview.openAllChanges",
         "title": "Open All Changes",
         "category": "GH PR Review",
@@ -392,6 +410,18 @@
         {
           "command": "ghPrReview.markViewedAndNext",
           "when": "false"
+        },
+        {
+          "command": "ghPrReview.markLinesReviewed",
+          "when": "resourcePath in ghPrReview.unviewedEditorPaths"
+        },
+        {
+          "command": "ghPrReview.markLinesNotReviewed",
+          "when": "resourcePath in ghPrReview.unviewedEditorPaths"
+        },
+        {
+          "command": "ghPrReview.markAboveReviewed",
+          "when": "resourcePath in ghPrReview.unviewedEditorPaths"
         },
         {
           "command": "ghPrReview.comment.addSingle",
@@ -728,6 +758,23 @@
           "command": "ghPrReview.comment.cancelEdit",
           "when": "commentController == ghPrReview",
           "group": "inline@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "ghPrReview.markAboveReviewed",
+          "when": "resourcePath in ghPrReview.unviewedEditorPaths",
+          "group": "0_ghPrReview@1"
+        },
+        {
+          "command": "ghPrReview.markLinesReviewed",
+          "when": "resourcePath in ghPrReview.unviewedEditorPaths && editorHasSelection",
+          "group": "0_ghPrReview@2"
+        },
+        {
+          "command": "ghPrReview.markLinesNotReviewed",
+          "when": "resourcePath in ghPrReview.unviewedEditorPaths && editorHasSelection",
+          "group": "0_ghPrReview@3"
         }
       ]
     },

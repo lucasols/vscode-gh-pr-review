@@ -1,7 +1,14 @@
 import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { config } from '../config'
-import { baseDocRef, commitDocRef, headDocRef, viewedDocRef } from '../content/docRef'
+import {
+  baseDocRef,
+  commitDocRef,
+  headDocRef,
+  reviewedDocRef,
+  viewedDocRef,
+  type DocRef,
+} from '../content/docRef'
 import { toDocUri } from '../content/ghprFs'
 import { isChangedSinceViewed, type Baseline } from '../model/baselines'
 import type { PrDetail, PrFile } from '../model/types'
@@ -85,6 +92,31 @@ function showsSinceViewed(
   )
 }
 
+/**
+ * The left side of the diff of a file. The default diff of a file that is not
+ * viewed compares with the reviewed version, which hides the lines that were
+ * reviewed, like staged lines. It starts from the same version as the diff
+ * would without it.
+ */
+function leftOf(
+  mode: DiffMode,
+  detail: PrDetail,
+  file: PrFile,
+  baseline: Baseline | undefined,
+): { ref: DocRef; sinceViewed: boolean } {
+  const sinceViewed = showsSinceViewed(mode, file, baseline)
+  const reviewable =
+    file.viewedState !== 'VIEWED' && file.status !== 'removed' && file.blobSha !== undefined
+  // the reviewed version starts from the version of the default diff
+  const startsTheSame =
+    mode === 'auto' ||
+    (mode === 'sinceViewed' && showsSinceViewed('auto', file, baseline))
+
+  if (reviewable && startsTheSame) return { ref: reviewedDocRef(detail, file), sinceViewed }
+  if (sinceViewed) return { ref: viewedDocRef(detail, file, baseline), sinceViewed }
+  return { ref: baseDocRef(detail, file), sinceViewed }
+}
+
 // VS Code appends the number of files to the title of the tab
 const STACKED_TITLE = /^(?:All|Unviewed) Changes in (.+?)(?: \([^()]*\))?$/
 
@@ -117,11 +149,7 @@ export async function openStackedChanges(
   const baselines = services.store.getBaselines(prKey)
   const resources = await Promise.all(
     files.map(async (file) => {
-      const baseline = baselines[file.path]
-      const left =
-        showsSinceViewed('auto', file, baseline) ?
-          toDocUri(viewedDocRef(detail, file, baseline))
-        : toDocUri(baseDocRef(detail, file))
+      const left = toDocUri(leftOf('auto', detail, file, baselines[file.path]).ref)
       const right = await resolveHeadUri(services, prKey, detail, file)
       return [right, left, right] as const
     }),
@@ -156,8 +184,6 @@ export async function openFileDiff(
   const { detail, file } = loaded
 
   const baseline = services.store.getBaselines(prKey)[path]
-  let left: vscode.Uri
-  let label: string
 
   if (mode === 'sinceViewed' && !baseline) {
     void vscode.window.showInformationMessage(
@@ -166,13 +192,9 @@ export async function openFileDiff(
     return
   }
 
-  if (showsSinceViewed(mode, file, baseline)) {
-    left = toDocUri(viewedDocRef(detail, file, baseline))
-    label = 'Changes Since Viewed'
-  } else {
-    left = toDocUri(baseDocRef(detail, file))
-    label = `Pull Request #${detail.summary.number}`
-  }
+  const { ref, sinceViewed } = leftOf(mode, detail, file, baseline)
+  const left = toDocUri(ref)
+  const label = sinceViewed ? 'Changes Since Viewed' : `Pull Request #${detail.summary.number}`
 
   const right = await resolveHeadUri(services, prKey, detail, file)
 

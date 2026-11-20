@@ -291,7 +291,11 @@ export function registerCommands(
     'ghPrReview.toggleDiffMode': async (arg) => {
       const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input
       const original = input instanceof vscode.TabInputTextDiff ? input.original : undefined
-      const showsSinceViewed = original ? fromDocUri(original)?.side === 'viewed' : false
+      const ref = original ? fromDocUri(original) : undefined
+      // the reviewed version starts from the version that was viewed when it is the default
+      const showsSinceViewed =
+        ref?.side === 'viewed' ||
+        (ref?.side === 'reviewed' && config.defaultDiff() === 'sinceViewed')
       await openDiff(arg, showsSinceViewed ? 'full' : 'sinceViewed')
     },
 

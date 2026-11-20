@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { registerCommands } from './commands'
 import { AUTO_MARK_SETTING, config } from './config'
 import { ContentService } from './content/contentService'
+import { docRefPrKey } from './content/docRef'
 import { GHPR_SCHEME, GhprFileSystem } from './content/ghprFs'
 import { checkoutPr } from './git/checkout'
 import { git } from './git/gitCli'
@@ -13,6 +14,7 @@ import { GitHubClient } from './github/client'
 import { initLog, logInfo, logWarn } from './log'
 import { BaselineStore, isChangedSinceViewed } from './model/baselines'
 import { CHANGE_KIND_LABELS, ChangeClassifier } from './model/changeClassifier'
+import { LineReviewStore, LineReviews } from './model/lineReviews'
 import { PrStore } from './model/prStore'
 import { headBlobId } from './model/types'
 import type { Services } from './services'
@@ -22,6 +24,7 @@ import { ChangesView } from './views/changesView'
 import { CommentsController } from './views/comments'
 import { TreeDecorationProvider } from './views/decorations'
 import { getLocalFileUri, openFileDiff } from './views/diffOpener'
+import { LineReviewController } from './views/lineReviewController'
 import { OverviewPanels } from './views/overviewPanel'
 import { PrListView } from './views/prListView'
 import { PrStatusBar } from './views/statusBar'
@@ -92,7 +95,25 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   void content.pruneDisk(Date.now())
 
   const classifier = new ChangeClassifier(content, logWarn)
-  const services: Services = { context, store, content, classifier, auth }
+  const lineReviewStore = new LineReviewStore(context.globalState)
+  lineReviewStore.prune()
+  const lineReviews = new LineReviews({
+    records: lineReviewStore,
+    content,
+    preferSinceViewed: () => config.defaultDiff() === 'sinceViewed',
+    now: () => Date.now(),
+    log: logWarn,
+  })
+  const services: Services = { context, store, content, classifier, lineReviews, auth }
+
+  const ghprFs = new GhprFileSystem(content, async (ref) => {
+    const prKey = docRefPrKey(ref)
+    if (!store.getDetail(prKey)) await store.refreshDetail(prKey)
+    const detail = store.getDetail(prKey)
+    const file = detail?.files.find((item) => item.path === ref.path)
+    if (!detail || !file) throw new Error(`${ref.path} is not part of the pull request`)
+    return lineReviews.reviewedText(detail, file, store.getBaselines(prKey)[file.path])
+  })
 
   const decorations = new TreeDecorationProvider()
   const changes = new ChangesView(services)
@@ -113,13 +134,22 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     prList,
     comments,
     panels,
+    new LineReviewController(services),
     new PrStatusBar(services),
     { dispose: () => store.dispose() },
     { dispose: () => classifier.dispose() },
-    vscode.workspace.registerFileSystemProvider(GHPR_SCHEME, new GhprFileSystem(content), {
+    { dispose: () => lineReviews.dispose() },
+    vscode.workspace.registerFileSystemProvider(GHPR_SCHEME, ghprFs, {
       isReadonly: true,
       isCaseSensitive: true,
     }),
+    // a file that is fully reviewed does not need its partial review anymore
+    store.onDidChangeDetail((key) => {
+      const confirmed = store.getConfirmedDetail(key)
+      if (confirmed) lineReviews.forgetFinished(confirmed)
+      ghprFs.reviewedChanged(key)
+    }),
+    lineReviews.onDidChange((key) => ghprFs.reviewedChanged(key)),
     vscode.window.registerFileDecorationProvider(decorations),
     ...registerCommands(services, { changes, panels }),
   )

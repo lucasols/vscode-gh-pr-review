@@ -24,6 +24,7 @@ src/
   model/             no `vscode` imports, fully unit-tested
     prStore.ts       the single source of truth (lists, details, mutations)
     baselines.ts     which version of each file the user viewed
+    lineReviews.ts   reviewed lines of a file, like staged lines
     changeClassifier.ts  lockfile / rename only / imports only
   github/            GraphQL + REST client, zod schemas of every response
   content/           file contents by git blob, cached; `ghpr:` file system
@@ -48,6 +49,16 @@ src/
 - Every setting, command and menu is declared in `package.json`. The host test
   fails when a command is declared but not registered, or the other way around.
 - The webview imports only types from `shared/`, to keep zod out of its bundle.
+
+## Reviewed lines
+
+`LineReviews` stores the reviewed lines of a file with the head blob they are
+numbered in, and moves them to a new blob with a line diff. The default diff
+(`openFileDiff` in `auto` mode) has the `reviewed` side on the left: a doc
+whose content changes, computed by `LineReviews.reviewedText` and refreshed
+through `GhprFileSystem.reviewedChanged`. The lines to review come from a diff
+of the contents (`util/changedLines.ts`), not from the patch, so they match
+the reviewed version. The records of a viewed file are dropped.
 
 ## Viewed baselines
 

@@ -66,6 +66,27 @@ The viewed version is always the one that GitHub has. When a file that is open
 in the workspace differs from it, for example because of edits that are not
 pushed, marking the file as viewed shows a warning.
 
+### Reviewing part of a file
+
+A large file does not have to be reviewed in one go. Mark the lines that you
+reviewed, like staging them in git, and they leave the diff:
+
+- **Mark Lines Above as Reviewed**: every change up to the line of the cursor
+- **Mark Selected Lines as Reviewed** and **Mark Selected Lines as Not
+  Reviewed**: the changes in the selection
+
+They are in the context menu of the editor and work in both sides of the diff
+and in the file of the workspace. The left side of a diff is the version that
+you started from with the reviewed changes applied, so the diff shows only
+what is left. The Changes view shows how much of a file is reviewed, e.g.
+`40% reviewed`. When every change of a file is reviewed, the file is marked as
+viewed, and the reviewed lines of a viewed file are forgotten.
+
+A change keeps its removed lines on the left until all its added lines are
+reviewed. A deletion counts as the line after it. After a push, the reviewed
+lines that did not change stay reviewed. "Open Full Diff" shows the diff
+without the reviewed changes applied.
+
 ### Changes that are not relevant
 
 Some changes are noise in a review. They get an indicator in the tree:

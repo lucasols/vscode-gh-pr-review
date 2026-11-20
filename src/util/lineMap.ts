@@ -13,7 +13,8 @@ function splitLines(text: string): string[] {
   return text.split(/\r\n|\n/)
 }
 
-const IDENTITY: LineMapper = {
+/** Maps every line to itself */
+export const IDENTITY_MAPPER: LineMapper = {
   identical: true,
   toTarget: (line) => line,
   toSource: (line) => line,
@@ -25,7 +26,7 @@ const IDENTITY: LineMapper = {
  * has changes which were not pushed.
  */
 export function createLineMapper(source: string, target: string): LineMapper {
-  if (source === target) return IDENTITY
+  if (source === target) return IDENTITY_MAPPER
 
   const forward = new Map<number, number>()
   const backward = new Map<number, number>()

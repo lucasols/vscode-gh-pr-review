@@ -1,14 +1,17 @@
 import { join, relative, sep } from 'node:path'
 import * as vscode from 'vscode'
+import { config } from '../config'
 import {
   baseDocRef,
   docRefPrKey,
   encodeDocRef,
   headDocRef,
+  reviewedDocRef,
   type DocRef,
 } from '../content/docRef'
 import { fromDocUri, toDocUri } from '../content/ghprFs'
 import { logWarn } from '../log'
+import { isChangedSinceViewed } from '../model/baselines'
 import type { CommentTarget } from '../model/prStore'
 import type {
   DiffSide,
@@ -82,6 +85,27 @@ function toRange(start: number, end: number): vscode.Range {
   return new vscode.Range(start - 1, 0, end - 1, 0)
 }
 
+/** The ranges of the lines of a version in a document that shows another version */
+function mapToDocument(ranges: readonly LineRange[], mapper: LineMapper): vscode.Range[] {
+  const result: vscode.Range[] = []
+  for (const range of ranges) {
+    let start: number | undefined
+    let previous: number | undefined
+    for (let line = range.start; line <= range.end; line++) {
+      const mapped = mapper.toTarget(line)
+      if (mapped !== undefined && previous !== undefined && mapped === previous + 1) {
+        previous = mapped
+        continue
+      }
+      if (start !== undefined && previous !== undefined) result.push(toRange(start, previous))
+      start = mapped
+      previous = mapped
+    }
+    if (start !== undefined && previous !== undefined) result.push(toRange(start, previous))
+  }
+  return result
+}
+
 /**
  * Shows the review threads of the loaded pull requests in the editors and
  * creates, edits and resolves them. The threads are a projection of the store:
@@ -108,6 +132,7 @@ export class CommentsController implements vscode.Disposable {
       this.controller,
       store.onDidChangeDetail(() => this.reconcileSoon.call()),
       store.onDidChangeLists(() => this.reconcileSoon.call()),
+      services.lineReviews.onDidChange(() => this.reconcileSoon.call()),
       vscode.workspace.onDidSaveTextDocument((document) => {
         if (this.findLocalFile(document.uri)) this.reconcileSoon.call()
       }),
@@ -168,6 +193,46 @@ export class CommentsController implements vscode.Disposable {
     return { prKey, detail, file, side: ref.side === 'head' ? 'RIGHT' : 'LEFT' }
   }
 
+  /**
+   * The file whose current reviewed version a document shows, when that
+   * version starts from the base version. The comments of the base version
+   * are placed in it, on the lines that it still has.
+   */
+  private reviewedFile(
+    ref: DocRef,
+  ): { prKey: string; detail: PrDetail; file: PrFile } | undefined {
+    if (ref.side !== 'reviewed') return undefined
+    const prKey = docRefPrKey(ref)
+    const detail = this.services.store.getDetail(prKey)
+    const file = detail?.files.find((item) => item.path === ref.path)
+    if (!detail || !file || file.blobSha !== ref.blob) return undefined
+    return { prKey, detail, file }
+  }
+
+  /** Maps the lines of the base version to the reviewed version */
+  private async getReviewedMapper(
+    prKey: string,
+    detail: PrDetail,
+    file: PrFile,
+  ): Promise<LineMapper | undefined> {
+    const { store, content, lineReviews } = this.services
+    if (file.viewedState === 'VIEWED' || file.status === 'removed') return undefined
+    const baseline = store.getBaselines(prKey)[file.path]
+    // then it starts from the version that was viewed, which has no comments
+    if (config.defaultDiff() === 'sinceViewed' && isChangedSinceViewed(file, baseline)) {
+      return undefined
+    }
+    try {
+      const [base, reviewed] = await Promise.all([
+        content.readText(baseDocRef(detail, file)),
+        lineReviews.reviewedText(detail, file, baseline),
+      ])
+      return createLineMapper(base, reviewed)
+    } catch {
+      return undefined
+    }
+  }
+
   /** A file of the workspace that belongs to the pull request of its branch */
   private findLocalFile(
     uri: vscode.Uri,
@@ -213,6 +278,19 @@ export class CommentsController implements vscode.Disposable {
     document: vscode.TextDocument,
   ): Promise<vscode.CommentingRanges | undefined> {
     const ref = fromDocUri(document.uri)
+    const reviewed = ref ? this.reviewedFile(ref) : undefined
+    if (reviewed) {
+      const mapper = await this.getReviewedMapper(
+        reviewed.prKey,
+        reviewed.detail,
+        reviewed.file,
+      )
+      if (!mapper) return undefined
+      return {
+        enableFileComments: false,
+        ranges: mapToDocument(parsePatchLines(reviewed.file.patch).left, mapper),
+      }
+    }
     if (ref) {
       const current = this.currentFile(ref)
       if (!current) return undefined
@@ -229,25 +307,10 @@ export class CommentsController implements vscode.Disposable {
     const mapper = await this.getLocalMapper(local.detail, local.file, document.uri)
     if (!mapper) return undefined
 
-    const ranges: vscode.Range[] = []
-    for (const range of parsePatchLines(local.file.patch).right) {
-      let start: number | undefined
-      let previous: number | undefined
-      for (let line = range.start; line <= range.end; line++) {
-        const mapped = mapper.toTarget(line)
-        if (mapped !== undefined && previous !== undefined && mapped === previous + 1) {
-          previous = mapped
-          continue
-        }
-        if (start !== undefined && previous !== undefined) {
-          ranges.push(toRange(start, previous))
-        }
-        start = mapped
-        previous = mapped
-      }
-      if (start !== undefined && previous !== undefined) ranges.push(toRange(start, previous))
+    return {
+      enableFileComments: false,
+      ranges: mapToDocument(parsePatchLines(local.file.patch).right, mapper),
     }
-    return { enableFileComments: false, ranges }
   }
 
   private async collectDesired(): Promise<Map<string, DesiredThread>> {
@@ -262,6 +325,7 @@ export class CommentsController implements vscode.Disposable {
       if (!detail) continue
       const checkout = store.getCheckoutOf(prKey)
       const mappers = new Map<string, LineMapper | undefined>()
+      const reviewedMappers = new Map<string, LineMapper | undefined>()
 
       for (const data of detail.threads) {
         if (data.isOutdated || data.comments.length === 0) continue
@@ -279,6 +343,25 @@ export class CommentsController implements vscode.Disposable {
             toRange(startLine, endLine)
           : undefined
         add({ uri: toDocUri(ref), range, prKey, data })
+
+        // the same thread in the reviewed version, which the default diff shows
+        if (data.side === 'LEFT' && file.blobSha !== undefined) {
+          if (!reviewedMappers.has(file.path)) {
+            reviewedMappers.set(file.path, await this.getReviewedMapper(prKey, detail, file))
+          }
+          const mapper = reviewedMappers.get(file.path)
+          const mappedEnd = endLine === undefined ? undefined : mapper?.toTarget(endLine)
+          if (mapper && mappedEnd !== undefined) {
+            const mappedStart =
+              (startLine === undefined ? undefined : mapper.toTarget(startLine)) ?? mappedEnd
+            add({
+              uri: toDocUri(reviewedDocRef(detail, file)),
+              range: toRange(mappedStart, mappedEnd),
+              prKey,
+              data,
+            })
+          }
+        }
 
         // the same thread in the file of the workspace, when the branch is checked out
         if (data.side !== 'RIGHT' || !checkout || file.status === 'removed') continue
@@ -413,6 +496,16 @@ export class CommentsController implements vscode.Disposable {
     }
 
     const ref = fromDocUri(thread.uri)
+    const reviewed = ref ? this.reviewedFile(ref) : undefined
+    if (reviewed) {
+      const { prKey, detail, file } = reviewed
+      if (start === undefined || end === undefined) return NOT_IN_DIFF
+      const mapper = await this.getReviewedMapper(prKey, detail, file)
+      const line = mapper?.toSource(end)
+      const startLine = mapper?.toSource(start)
+      if (line === undefined || startLine === undefined) return NOT_IN_DIFF
+      return check(prKey, file, 'LEFT', startLine, line)
+    }
     if (ref) {
       const current = this.currentFile(ref)
       if (!current) {
